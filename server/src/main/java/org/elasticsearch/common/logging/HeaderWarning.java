@@ -206,7 +206,6 @@ public class HeaderWarning {
      * {@code 299 Elasticsearch-6.0.0 "warning value"}, the return value of this method would be {@code warning value}.
      *
      * @param s the value of a warning header formatted according to RFC 7234.
-     * @param stripXContentPosition whether to remove XContent location information or not
      * @return the extracted warning value
      */
     public static String extractWarningValueFromWarningHeader(final String s, boolean stripXContentPosition) {

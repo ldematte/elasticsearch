@@ -268,7 +268,8 @@ public record MlConfigVersion(int id) implements VersionId<MlConfigVersion>, ToX
         return version1.id > version2.id ? version1 : version2;
     }
 
-    public static MlConfigVersion fromVersion(Version version) {
+    // Visible only for testing
+    static MlConfigVersion fromVersion(Version version) {
         if (version.equals(Version.V_8_10_0)) {
             return V_10;
         }
@@ -276,13 +277,6 @@ public record MlConfigVersion(int id) implements VersionId<MlConfigVersion>, ToX
             throw new IllegalArgumentException("Cannot convert " + version + ". Incompatible version");
         }
         return fromId(version.id);
-    }
-
-    public static Version toVersion(MlConfigVersion mlConfigVersion) {
-        if (mlConfigVersion.before(FIRST_ML_VERSION) || mlConfigVersion.onOrAfter(V_8_10_0)) {
-            throw new IllegalArgumentException("Cannot convert " + mlConfigVersion + ". Incompatible version");
-        }
-        return Version.fromId(mlConfigVersion.id);
     }
 
     public static MlConfigVersion getMinMlConfigVersion(DiscoveryNodes nodes) {
