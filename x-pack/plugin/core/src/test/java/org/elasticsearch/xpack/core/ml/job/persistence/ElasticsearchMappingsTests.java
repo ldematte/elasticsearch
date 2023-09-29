@@ -6,7 +6,7 @@
  */
 package org.elasticsearch.xpack.core.ml.job.persistence;
 
-import org.elasticsearch.Version;
+import org.elasticsearch.Build;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingAction;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
@@ -148,14 +148,14 @@ public class ElasticsearchMappingsTests extends ESTestCase {
     public void testMappingRequiresUpdateRecentMappingVersion() {
         {
             ClusterState cs = getClusterStateWithMappingsWithMetadata(
-                Collections.singletonMap("version_current", Version.CURRENT.toString())
+                Collections.singletonMap("version_current", Build.current().version())
             );
             String[] indices = new String[] { "version_current" };
             assertArrayEquals(indices, ElasticsearchMappings.mappingRequiresUpdate(cs, indices, 1));
         }
         {
             ClusterState cs = getClusterStateWithMappingsWithMetadata(
-                Collections.singletonMap("version_current", Version.CURRENT.toString()),
+                Collections.singletonMap("version_current", Build.current().version()),
                 Collections.singletonMap(SystemIndexDescriptor.VERSION_META_KEY, 1)
             );
             String[] indices = new String[] { "version_current" };
@@ -163,7 +163,7 @@ public class ElasticsearchMappingsTests extends ESTestCase {
         }
         {
             ClusterState cs = getClusterStateWithMappingsWithMetadata(
-                Collections.singletonMap("version_current", Version.CURRENT.toString()),
+                Collections.singletonMap("version_current", Build.current().version()),
                 Collections.singletonMap(SystemIndexDescriptor.VERSION_META_KEY, 1)
             );
             String[] indices = new String[] { "version_current" };
@@ -193,7 +193,7 @@ public class ElasticsearchMappingsTests extends ESTestCase {
         }
         {
             ClusterState cs = getClusterStateWithMappingsWithMetadata(
-                Collections.singletonMap("version_newer", Version.CURRENT),
+                Collections.singletonMap("version_newer", Build.current().version()),
                 Collections.singletonMap(SystemIndexDescriptor.VERSION_META_KEY, 2)
             );
             String[] indices = new String[] { "version_newer" };
@@ -201,7 +201,7 @@ public class ElasticsearchMappingsTests extends ESTestCase {
         }
         {
             ClusterState cs = getClusterStateWithMappingsWithMetadata(
-                Collections.singletonMap("version_newer", Version.CURRENT),
+                Collections.singletonMap("version_newer", Build.current().version()),
                 Collections.singletonMap(SystemIndexDescriptor.VERSION_META_KEY, 1)
             );
             String[] indices = new String[] { "version_newer" };
@@ -217,7 +217,7 @@ public class ElasticsearchMappingsTests extends ESTestCase {
         }
         {
             ClusterState cs = getClusterStateWithMappingsWithMetadata(
-                Collections.singletonMap("version_newer_minor", Version.CURRENT),
+                Collections.singletonMap("version_newer_minor", Build.current().version()),
                 Collections.singletonMap(SystemIndexDescriptor.VERSION_META_KEY, 1)
             );
             String[] indices = new String[] { "version_newer_minor" };
