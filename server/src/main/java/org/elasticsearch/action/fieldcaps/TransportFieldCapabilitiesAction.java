@@ -15,8 +15,8 @@ import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.ChannelActionListener;
-import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.action.support.RefCountingRunnable;
+import org.elasticsearch.action.support.RegistrableTransportAction;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -62,7 +62,7 @@ import java.util.stream.Collectors;
 
 import static org.elasticsearch.action.search.TransportSearchHelper.checkCCSVersionCompatibility;
 
-public class TransportFieldCapabilitiesAction extends HandledTransportAction<FieldCapabilitiesRequest, FieldCapabilitiesResponse> {
+public class TransportFieldCapabilitiesAction extends RegistrableTransportAction<FieldCapabilitiesRequest, FieldCapabilitiesResponse> {
     public static final String ACTION_NODE_NAME = FieldCapabilitiesAction.NAME + "[n]";
     public static final Logger LOGGER = LogManager.getLogger(TransportFieldCapabilitiesAction.class);
 
@@ -85,13 +85,7 @@ public class TransportFieldCapabilitiesAction extends HandledTransportAction<Fie
         IndexNameExpressionResolver indexNameExpressionResolver
     ) {
         // TODO replace SAME when removing workaround for https://github.com/elastic/elasticsearch/issues/97916
-        super(
-            FieldCapabilitiesAction.NAME,
-            transportService,
-            actionFilters,
-            FieldCapabilitiesRequest::new,
-            transportService.getThreadPool().executor(ThreadPool.Names.SAME)
-        );
+        super(FieldCapabilitiesAction.NAME, actionFilters, transportService.getTaskManager());
         this.threadPool = threadPool;
         this.searchCoordinationExecutor = threadPool.executor(ThreadPool.Names.SEARCH_COORDINATION);
         this.transportService = transportService;
@@ -105,6 +99,28 @@ public class TransportFieldCapabilitiesAction extends HandledTransportAction<Fie
             new NodeTransportHandler()
         );
         this.ccsCheckCompatibility = SearchService.CCS_VERSION_CHECK_SETTING.get(clusterService.getSettings());
+    }
+
+    @Override
+    public void registerWithTransport(TransportActionRegister transportAction) {
+        transportAction.register(
+            FieldCapabilitiesAction.NAME,
+            this.searchCoordinationExecutor,
+            FieldCapabilitiesRequest::new,
+            (request, channel, task) -> execute(task, request, new ChannelActionListener<>(channel))
+        );
+
+        transportAction.register(
+            ACTION_NODE_NAME,
+            this.searchCoordinationExecutor,
+            FieldCapabilitiesNodeRequest::new,
+            new NodeTransportHandler()
+        );
+    }
+
+    @Override
+    public void registerWithNodeClient(ClientActionRegister clientAction) {
+        clientAction.register(FieldCapabilitiesAction.INSTANCE, this.searchCoordinationExecutor);
     }
 
     @Override

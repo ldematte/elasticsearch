@@ -17,16 +17,12 @@ import org.elasticsearch.Build;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.action.ActionModule;
-import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.ActionResponse;
-import org.elasticsearch.action.ActionType;
 import org.elasticsearch.action.admin.cluster.repositories.reservedstate.ReservedRepositoryAction;
 import org.elasticsearch.action.admin.indices.template.reservedstate.ReservedComposableIndexTemplateAction;
 import org.elasticsearch.action.ingest.ReservedPipelineAction;
 import org.elasticsearch.action.search.SearchExecutionStatsCollector;
 import org.elasticsearch.action.search.SearchPhaseController;
 import org.elasticsearch.action.search.SearchTransportService;
-import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.action.update.UpdateHelper;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.node.NodeClient;
@@ -62,7 +58,6 @@ import org.elasticsearch.cluster.version.CompatibilityVersions;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.component.LifecycleComponent;
 import org.elasticsearch.common.inject.Injector;
-import org.elasticsearch.common.inject.Key;
 import org.elasticsearch.common.inject.ModulesBuilder;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.logging.DeprecationCategory;
@@ -216,8 +211,6 @@ import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static org.elasticsearch.core.Types.forciblyCast;
 
 /**
  * Class uses to perform all the operations needed to construct a {@link Node} instance.
@@ -1201,15 +1194,53 @@ class NodeConstruction {
         resourcesToClose.add(injector.getInstance(PeerRecoverySourceService.class));
         this.pluginLifecycleComponents = Collections.unmodifiableList(pluginLifecycleComponents);
 
-        // Due to Java's type erasure with generics, the injector can't give us exactly what we need, and we have
-        // to resort to some evil casting.
-        @SuppressWarnings("rawtypes")
-        Map<ActionType<? extends ActionResponse>, TransportAction<? extends ActionRequest, ? extends ActionResponse>> actions =
-            forciblyCast(injector.getInstance(new Key<Map<ActionType, TransportAction>>() {
-            }));
-
+        final var indexNameExpressionResolver = clusterModule.getIndexNameExpressionResolver();
         client.initialize(
-            actions,
+            Actions.setupActions(
+                pluginsService.filterPlugins(ActionPlugin.class).toList(),
+                actionModule.getActionFilters(),
+                new Actions.ActionServices() {
+                    @Override
+                    public ClusterService clusterService() {
+                        return clusterService;
+                    }
+
+                    @Override
+                    public ThreadPool threadPool() {
+                        return threadPool;
+                    }
+
+                    @Override
+                    public TransportService transportService() {
+                        return transportService;
+                    }
+
+                    @Override
+                    public NodeService nodeService() {
+                        return nodeService;
+                    }
+
+                    @Override
+                    public SearchTransportService searchTransportService() {
+                        return searchTransportService;
+                    }
+
+                    @Override
+                    public NodeClient client() {
+                        return client;
+                    }
+
+                    @Override
+                    public IndexNameExpressionResolver indexNameExpressionResolver() {
+                        return indexNameExpressionResolver;
+                    }
+
+                    @Override
+                    public IndicesService indicesService() {
+                        return indicesService;
+                    }
+                }
+            ),
             transportService.getTaskManager(),
             () -> clusterService.localNode().getId(),
             transportService.getLocalNodeConnection(),

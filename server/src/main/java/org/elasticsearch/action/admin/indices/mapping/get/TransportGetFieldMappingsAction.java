@@ -10,15 +10,13 @@ package org.elasticsearch.action.admin.indices.mapping.get;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.tasks.Task;
-import org.elasticsearch.transport.TransportService;
+import org.elasticsearch.tasks.TaskManager;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,27 +26,20 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableMap;
 
-public class TransportGetFieldMappingsAction extends HandledTransportAction<GetFieldMappingsRequest, GetFieldMappingsResponse> {
+public class TransportGetFieldMappingsAction extends TransportAction<GetFieldMappingsRequest, GetFieldMappingsResponse> {
 
     private final ClusterService clusterService;
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private final NodeClient client;
 
-    @Inject
     public TransportGetFieldMappingsAction(
-        TransportService transportService,
+        TaskManager taskManager,
         ClusterService clusterService,
         ActionFilters actionFilters,
         IndexNameExpressionResolver indexNameExpressionResolver,
         NodeClient client
     ) {
-        super(
-            GetFieldMappingsAction.NAME,
-            transportService,
-            actionFilters,
-            GetFieldMappingsRequest::new,
-            EsExecutors.DIRECT_EXECUTOR_SERVICE
-        );
+        super(GetFieldMappingsAction.NAME, actionFilters, taskManager);
         this.clusterService = clusterService;
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         this.client = client;
