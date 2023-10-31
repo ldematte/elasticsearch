@@ -92,12 +92,6 @@ public class TransportFieldCapabilitiesAction extends RegistrableTransportAction
         this.clusterService = clusterService;
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         this.indicesService = indicesService;
-        transportService.registerRequestHandler(
-            ACTION_NODE_NAME,
-            this.searchCoordinationExecutor,
-            FieldCapabilitiesNodeRequest::new,
-            new NodeTransportHandler()
-        );
         this.ccsCheckCompatibility = SearchService.CCS_VERSION_CHECK_SETTING.get(clusterService.getSettings());
     }
 

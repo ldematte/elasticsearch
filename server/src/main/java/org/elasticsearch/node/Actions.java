@@ -257,6 +257,8 @@ class Actions {
             Consumer<ActionRegistrar> registrationConsumer,
             RegistrableTransportAction<? extends ActionRequest, ? extends ActionResponse> transportAction
         ) {
+            // TODO: here we can accept a TransporAction as second parameter and check (dynamically) for interface implementation
+            // e.g. var registerWithNodeClient = (transportAction instanceof RegistrableNodeClientAction) ? /*register code*/ : () -> {}
             var registrar = new ActionRegistrar(
                 () -> transportAction.registerWithTransport(this::registerTransportAction),
                 () -> transportAction.registerWithNodeClient((actionType, executor) -> actions.put(actionType, transportAction))
