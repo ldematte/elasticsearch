@@ -19,6 +19,7 @@ import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsAction
 import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsRequest;
 import org.elasticsearch.action.admin.indices.mapping.get.TransportGetFieldMappingsAction;
 import org.elasticsearch.action.fieldcaps.TransportFieldCapabilitiesAction;
+import org.elasticsearch.action.ingest.SimulatePipelineTransportAction;
 import org.elasticsearch.action.search.SearchTransportService;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.ChannelActionListener;
@@ -150,13 +151,13 @@ class Actions {
         });
 
         // SOLUTION 2B: same, but with some little helper classes to make it nicer
-        // a) one registry for the whole method. Will hold call the registration code inside each TransportAction instance
+        // a) one registry for the whole method. Will call the registration code inside each TransportAction instance
         // and populate the map need for NodeClient (or create it - no need to create it outside and pass it?)
-        ActionRegistry actionRegistry = new ActionRegistry(actions, services);
+        Solution2BActionRegistry solution2BActionRegistry = new Solution2BActionRegistry(actions, services);
 
         // b) for each TransportAction: create and instance and register it (with TransportService, NodeClient, or both)
-        actionRegistry.registerAction(
-            ActionRegistrar::registerWithTransportServiceAndNodeClient,
+        solution2BActionRegistry.registerAction(
+            Actions.ActionRegistrar::registerWithTransportServiceAndNodeClient,
             new TransportFieldCapabilitiesAction(
                 services.transportService(),
                 services.clusterService(),
@@ -167,7 +168,62 @@ class Actions {
             )
         );
 
+        // SOLUTION 2C: same, but with some little helper classes to make it nicer
+        // a) one registry for the whole method. Registration methods on the registry will be called by the registration code inside each
+        // TransportAction createAndRegister method.
+        // The registry will forward registration to TransportService and populate the map need for NodeClient (or create it - no need to
+        // create it outside and pass it?)
+        // If we want to, we can filter out/block registration to one or other with a filter class:
+        // SimulatePipelineTransportAction.createAndRegister(... new TransportOnlyRegistrar(solution2CActionRegistry));
+        Solution2CActionRegistry solution2CActionRegistry = new Solution2CActionRegistry(actions, services);
+
+        SimulatePipelineTransportAction.createAndRegister(
+            services.threadPool(),
+            services.transportService(),
+            actionFilters,
+            services.nodeService().getIngestService(),
+            solution2CActionRegistry);
+
         return unmodifiableMap(actions);
+    }
+
+    private static class Solution2CActionRegistry implements org.elasticsearch.action.support.ActionRegistrar {
+
+        private final Map<ActionType<? extends ActionResponse>, TransportAction<? extends ActionRequest, ? extends ActionResponse>> actions;
+        private final ActionServices services;
+
+        Solution2CActionRegistry(
+            Map<ActionType<? extends ActionResponse>, TransportAction<? extends ActionRequest, ? extends ActionResponse>> actions,
+            ActionServices services) {
+
+            this.actions = actions;
+            this.services = services;
+        }
+
+
+        @Override
+        public <Request extends ActionRequest> void registerTransport(
+            TransportAction<Request, ? extends ActionResponse> transportAction,
+            Executor executor,
+            Writeable.Reader<Request> requestReader,
+            TransportRequestHandler<Request> handler) {
+            services.transportService().registerRequestHandler(
+                transportAction.actionName,
+                executor,
+                false,
+                true,
+                requestReader,
+                handler
+            );
+        }
+
+        @Override
+        public <Response extends ActionResponse> void registerClient(
+            ActionType<Response> actionType,
+            TransportAction<? extends ActionRequest, Response> transportAction,
+            Executor executor) {
+            actions.put(actionType, transportAction);
+        }
     }
 
     private static class TransportActionRegistration<Request extends ActionRequest, Response extends ActionResponse> {
@@ -232,11 +288,11 @@ class Actions {
         }
     }
 
-    private static class ActionRegistry {
+    private static class Solution2BActionRegistry {
         private final Map<ActionType<? extends ActionResponse>, TransportAction<? extends ActionRequest, ? extends ActionResponse>> actions;
         private final ActionServices services;
 
-        ActionRegistry(
+        Solution2BActionRegistry(
             Map<ActionType<? extends ActionResponse>, TransportAction<? extends ActionRequest, ? extends ActionResponse>> actions,
             ActionServices services
         ) {
@@ -254,12 +310,12 @@ class Actions {
         }
 
         void registerAction(
-            Consumer<ActionRegistrar> registrationConsumer,
+            Consumer<Actions.ActionRegistrar> registrationConsumer,
             RegistrableTransportAction<? extends ActionRequest, ? extends ActionResponse> transportAction
         ) {
             // TODO: here we can accept a TransporAction as second parameter and check (dynamically) for interface implementation
             // e.g. var registerWithNodeClient = (transportAction instanceof RegistrableNodeClientAction) ? /*register code*/ : () -> {}
-            var registrar = new ActionRegistrar(
+            var registrar = new Actions.ActionRegistrar(
                 () -> transportAction.registerWithTransport(this::registerTransportAction),
                 () -> transportAction.registerWithNodeClient((actionType, executor) -> actions.put(actionType, transportAction))
             );

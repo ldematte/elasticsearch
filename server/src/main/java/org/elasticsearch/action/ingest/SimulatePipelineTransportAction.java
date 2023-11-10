@@ -13,11 +13,12 @@ import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.action.support.ActionRegistrar;
+import org.elasticsearch.action.support.ChannelActionListener;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.Randomness;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.xcontent.XContentHelper;
@@ -33,7 +34,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Random;
 
-public class SimulatePipelineTransportAction extends HandledTransportAction<SimulatePipelineRequest, SimulatePipelineResponse> {
+public class SimulatePipelineTransportAction extends TransportAction<SimulatePipelineRequest, SimulatePipelineResponse> {
     private static final Logger logger = LogManager.getLogger(SimulatePipelineTransportAction.class);
     /**
      * This is the amount of time given as the timeout for transport requests to the ingest node.
@@ -52,8 +53,7 @@ public class SimulatePipelineTransportAction extends HandledTransportAction<Simu
     // ThreadLocal because our unit testing framework does not like sharing Randoms across threads
     private final ThreadLocal<Random> random = ThreadLocal.withInitial(Randomness::get);
 
-    @Inject
-    public SimulatePipelineTransportAction(
+    private SimulatePipelineTransportAction(
         ThreadPool threadPool,
         TransportService transportService,
         ActionFilters actionFilters,
@@ -61,10 +61,8 @@ public class SimulatePipelineTransportAction extends HandledTransportAction<Simu
     ) {
         super(
             SimulatePipelineAction.NAME,
-            transportService,
             actionFilters,
-            SimulatePipelineRequest::new,
-            EsExecutors.DIRECT_EXECUTOR_SERVICE
+            transportService.getTaskManager()
         );
         this.ingestService = ingestService;
         this.executionService = new SimulateExecutionService(threadPool);
@@ -77,6 +75,30 @@ public class SimulatePipelineTransportAction extends HandledTransportAction<Simu
                 newTimeout -> this.ingestNodeTransportActionTimeout = newTimeout
             );
     }
+
+    public static void createAndRegister(ThreadPool threadPool,
+                                         TransportService transportService,
+                                         ActionFilters actionFilters,
+                                         IngestService ingestService,
+                                         ActionRegistrar actionRegistry) {
+
+        var simulatePipelineTransportAction = new SimulatePipelineTransportAction(threadPool, transportService, actionFilters,
+            ingestService);
+
+        actionRegistry.registerTransport(
+            simulatePipelineTransportAction,
+            EsExecutors.DIRECT_EXECUTOR_SERVICE,
+            SimulatePipelineRequest::new,
+            (request, channel, task) -> simulatePipelineTransportAction.execute(task, request, new ChannelActionListener<>(channel))
+        );
+
+        actionRegistry.registerClient(
+            SimulatePipelineAction.INSTANCE,
+            simulatePipelineTransportAction,
+            EsExecutors.DIRECT_EXECUTOR_SERVICE
+        );
+    }
+
 
     @Override
     protected void doExecute(Task task, SimulatePipelineRequest request, ActionListener<SimulatePipelineResponse> listener) {
