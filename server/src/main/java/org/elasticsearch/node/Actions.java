@@ -20,19 +20,14 @@ import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsReques
 import org.elasticsearch.action.admin.indices.mapping.get.TransportGetFieldMappingsAction;
 import org.elasticsearch.action.fieldcaps.TransportFieldCapabilitiesAction;
 import org.elasticsearch.action.ingest.SimulatePipelineTransportAction;
-import org.elasticsearch.action.search.SearchTransportService;
 import org.elasticsearch.action.support.ActionFilters;
+import org.elasticsearch.action.support.ActionServices;
 import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.RegistrableTransportAction;
 import org.elasticsearch.action.support.TransportAction;
-import org.elasticsearch.client.internal.node.NodeClient;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
-import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.plugins.ActionPlugin;
-import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportRequestHandler;
 import org.elasticsearch.transport.TransportService;
 
@@ -45,24 +40,6 @@ import java.util.function.Consumer;
 import static java.util.Collections.unmodifiableMap;
 
 class Actions {
-
-    interface ActionServices {
-        ClusterService clusterService();
-
-        ThreadPool threadPool();
-
-        TransportService transportService();
-
-        NodeService nodeService();
-
-        SearchTransportService searchTransportService();
-
-        NodeClient client();
-
-        IndexNameExpressionResolver indexNameExpressionResolver();
-
-        IndicesService indicesService();
-    }
 
     static Map<ActionType<? extends ActionResponse>, TransportAction<? extends ActionRequest, ? extends ActionResponse>> setupActions(
         List<ActionPlugin> actionPlugins,

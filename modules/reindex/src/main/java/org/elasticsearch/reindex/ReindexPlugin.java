@@ -12,6 +12,9 @@ import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.ActionType;
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
+import org.elasticsearch.action.support.ActionFilters;
+import org.elasticsearch.action.support.ActionRegistrar;
+import org.elasticsearch.action.support.ActionServices;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -55,6 +58,22 @@ public class ReindexPlugin extends Plugin implements ActionPlugin {
             new ActionHandler<>(DeleteByQueryAction.INSTANCE, TransportDeleteByQueryAction.class),
             new ActionHandler<>(RETHROTTLE_ACTION, TransportRethrottleAction.class)
         );
+    }
+
+    @Override
+    public void registerActions(ActionFilters actionFilters, ActionServices services, ActionRegistrar actionRegistrar) {
+        TransportReindexAction.createAndRegister(
+            services.environment().settings(),
+            services.threadPool(),
+            actionFilters,
+            services.indexNameExpressionResolver(),
+            services.clusterService(),
+            services.scriptService(),
+            null, // TODO
+            services.client(),
+            services.transportService(),
+            new ReindexSslConfig(services.environment().settings(), services.environment(), services.resourceWatcherService()),
+            actionRegistrar);
     }
 
     @Override

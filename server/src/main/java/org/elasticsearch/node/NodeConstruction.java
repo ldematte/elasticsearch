@@ -23,6 +23,7 @@ import org.elasticsearch.action.ingest.ReservedPipelineAction;
 import org.elasticsearch.action.search.SearchExecutionStatsCollector;
 import org.elasticsearch.action.search.SearchPhaseController;
 import org.elasticsearch.action.search.SearchTransportService;
+import org.elasticsearch.action.support.ActionServices;
 import org.elasticsearch.action.update.UpdateHelper;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.node.NodeClient;
@@ -1195,11 +1196,13 @@ class NodeConstruction {
         this.pluginLifecycleComponents = Collections.unmodifiableList(pluginLifecycleComponents);
 
         final var indexNameExpressionResolver = clusterModule.getIndexNameExpressionResolver();
+
+        // Separate ActionServices and PluginServices or unify? There is a lot of overlap, but not 100%
         client.initialize(
             Actions.setupActions(
                 pluginsService.filterPlugins(ActionPlugin.class).toList(),
                 actionModule.getActionFilters(),
-                new Actions.ActionServices() {
+                new ActionServices() {
                     @Override
                     public ClusterService clusterService() {
                         return clusterService;
@@ -1238,6 +1241,21 @@ class NodeConstruction {
                     @Override
                     public IndicesService indicesService() {
                         return indicesService;
+                    }
+
+                    @Override
+                    public ScriptService scriptService() {
+                        return scriptService;
+                    }
+
+                    @Override
+                    public Environment environment() {
+                        return environment;
+                    }
+
+                    @Override
+                    public ResourceWatcherService resourceWatcherService() {
+                        return resourceWatcherService;
                     }
                 }
             ),
