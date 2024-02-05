@@ -16,7 +16,7 @@ import java.util.Set;
 public class IndexSizeFeatures implements FeatureSpecification {
     @Override
     public Set<NodeFeature> getFeatures() {
-        // return Set.of(IndexSize.INDEX_SIZE_SUPPORTED);
-        return FeatureSpecification.super.getFeatures();
+        return Set.of(IndexSize.INDEX_SIZE_SUPPORTED);
+        //return FeatureSpecification.super.getFeatures();
     }
 }

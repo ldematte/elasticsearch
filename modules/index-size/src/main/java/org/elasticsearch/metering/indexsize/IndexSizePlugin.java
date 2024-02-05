@@ -11,18 +11,33 @@ package org.elasticsearch.metering.indexsize;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.SettingsModule;
+import org.elasticsearch.persistent.PersistentTaskParams;
 import org.elasticsearch.persistent.PersistentTasksExecutor;
 import org.elasticsearch.plugins.PersistentTaskPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.xcontent.NamedXContentRegistry;
+import org.elasticsearch.xcontent.ParseField;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
 public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin {
 
     private IndexSizeTaskExecutor indexSizeTaskExecutor;
+    private IndexSizePeriodicConsumer indexSizePeriodicConsumer;
+
+    @Override
+    public List<Setting<?>> getSettings() {
+        return List.of(
+            IndexSizeTaskExecutor.ENABLED_SETTING,
+            IndexSizeTaskExecutor.POLL_INTERVAL_SETTING
+        );
+    }
 
     @Override
     public Collection<?> createComponents(Plugin.PluginServices services) {
@@ -34,8 +49,7 @@ public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin {
         );
         indexSizeTaskExecutor.registerListeners(services.clusterService().getClusterSettings());
 
-        // Alternative A
-        var indexSizePeriodicConsumer = IndexSizePeriodicConsumer.create(
+        indexSizePeriodicConsumer = IndexSizePeriodicConsumer.create(
             services.clusterService().getSettings(),
             services.clusterService(),
             services.client()
@@ -52,5 +66,32 @@ public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin {
         IndexNameExpressionResolver expressionResolver
     ) {
         return List.of(indexSizeTaskExecutor);
+    }
+
+    @Override
+    public List<NamedXContentRegistry.Entry> getNamedXContent() {
+        return List.of(
+            new NamedXContentRegistry.Entry(
+                PersistentTaskParams.class,
+                new ParseField(IndexSize.TASK_NAME),
+                IndexSizeTaskParams::fromXContent
+            )
+        );
+    }
+
+    @Override
+    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
+        return List.of(
+            new NamedWriteableRegistry.Entry(PersistentTaskParams.class, IndexSize.TASK_NAME, reader -> IndexSizeTaskParams.INSTANCE)
+        );
+    }
+
+    @Override
+    public void close() throws IOException {
+        super.close();
+        if (indexSizePeriodicConsumer != null) {
+            indexSizePeriodicConsumer.close();
+            indexSizePeriodicConsumer = null;
+        }
     }
 }

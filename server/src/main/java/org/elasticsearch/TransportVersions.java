@@ -171,6 +171,9 @@ public class TransportVersions {
     public static final TransportVersion TRANSFORM_GET_BASIC_STATS = def(8_584_00_0);
     public static final TransportVersion NLP_DOCUMENT_CHUNKING_ADDED = def(8_585_00_0);
 
+    // TODO: this needs to be moved to a serverless version when we move IndexSizeService to serverless
+    public static final TransportVersion INDEX_SIZE_SERVICE_ADDED = def(8_586_00_0);
+
     /*
      * STOP! READ THIS FIRST! No, really,
      *        ____ _____ ___  ____  _        ____  _____    _    ____    _____ _   _ ___ ____    _____ ___ ____  ____ _____ _
