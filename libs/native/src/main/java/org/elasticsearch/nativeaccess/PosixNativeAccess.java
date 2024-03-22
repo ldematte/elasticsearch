@@ -38,9 +38,7 @@ abstract class PosixNativeAccess extends AbstractNativeAccess {
 
     static boolean isNativeVectorLibSupported() {
         var arch = getProperty("os.arch");
-        return Runtime.version().feature() >= 21 &&
-            (arch.equals("aarch64") && isMacOrLinux() ||
-                arch.equals("amd64") && isLinux());
+        return Runtime.version().feature() >= 21 && (arch.equals("aarch64") && isMacOrLinux() || arch.equals("amd64") && isLinux());
     }
 
     static boolean isLinux() {
