@@ -9,6 +9,10 @@
 #include <arm_neon.h>
 #include "vec.h"
 
+#ifndef STRIDE_BYTES_LEN
+#define STRIDE_BYTES_LEN 32
+#endif
+
 EXPORT int stride() {
     return STRIDE_BYTES_LEN;
 }
