@@ -47,7 +47,19 @@ model {
         cCompiler.withArguments { args -> args.addAll(["-O3", "-std=c99", "-march=core-avx2"]) }
       }
     }
-    clang(Clang)
+    cl(VisualCpp) {
+      eachPlatform { toolchain ->
+        def platform = toolchain.getPlatform()
+        if (platform.name == "x64") {
+          cCompiler.withArguments { args -> args.addAll(["/O2", "/LD", "-march=core-avx2"]) }
+        }
+      }
+    }
+    clang(Clang) {
+      target("amd64") {
+        cCompiler.withArguments { args -> args.addAll(["-O3", "-std=c99", "-march=core-avx2"]) }
+      }
+    }
   }
   components {
     vec(NativeLibrarySpec) {

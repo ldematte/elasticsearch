@@ -66,7 +66,7 @@ static inline void cpuid(int output[4], int functionNumber) {
     output[3] = d;
 
 #elif defined (_MSC_VER)
-    __cpuidex(output, functionnumber, ecxleaf);
+    __cpuidex(output, functionNumber, 0);
 #else
    #error Unsupported compiler
 #endif
