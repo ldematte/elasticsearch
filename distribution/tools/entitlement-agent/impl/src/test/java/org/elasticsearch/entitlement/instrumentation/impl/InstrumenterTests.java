@@ -17,12 +17,15 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
+import org.objectweb.asm.Type;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 
 import static org.elasticsearch.entitlement.instrumentation.impl.ASMUtils.bytecode2text;
+import static org.elasticsearch.entitlement.instrumentation.impl.InstrumenterImpl.getClassFileInfo;
+import static org.hamcrest.Matchers.is;
 
 /**
  * This tests {@link InstrumenterImpl} in isolation, without a java agent.
@@ -76,8 +79,11 @@ public class InstrumenterTests extends ESTestCase {
          */
         volatile boolean isActive;
 
+        int checkSystemExitCallCount = 0;
+
         @Override
         public void checkSystemExit(Class<?> callerClass, int status) {
+            checkSystemExitCallCount++;
             assertSame(InstrumenterTests.class, callerClass);
             assertEquals(123, status);
             throwIfActive();
@@ -90,18 +96,11 @@ public class InstrumenterTests extends ESTestCase {
         }
     }
 
-    public void test() throws Exception {
-        // This test doesn't replace ClassToInstrument in-place but instead loads a separate
-        // class ClassToInstrument_NEW that contains the instrumentation. Because of this,
-        // we need to configure the Transformer to use a MethodKey and instrumentationMethod
-        // with slightly different signatures (using the common interface Testable) which
-        // is not what would happen when it's run by the agent.
+    public void testClassIsInstrumented() throws Exception {
+        var classToInstrument = ClassToInstrument.class;
+        var instrumenter = createInstrumenter(classToInstrument, "systemExit");
 
-        MethodKey k1 = instrumentationService.methodKeyForTarget(ClassToInstrument.class.getMethod("systemExit", int.class));
-        Method v1 = EntitlementChecks.class.getMethod("checkSystemExit", Class.class, int.class);
-        var instrumenter = new InstrumenterImpl("_NEW", Map.of(k1, v1));
-
-        byte[] newBytecode = instrumenter.instrumentClassFile(ClassToInstrument.class).bytecodes();
+        byte[] newBytecode = instrumenter.instrumentClassFile(classToInstrument).bytecodes();
 
         if (logger.isTraceEnabled()) {
             logger.trace("Bytecode after instrumentation:\n{}", bytecode2text(newBytecode));
@@ -119,6 +118,43 @@ public class InstrumenterTests extends ESTestCase {
 
         // After checking is activated, everything should throw
         assertThrows(TestException.class, () -> callStaticSystemExit(newClass, 123));
+    }
+
+    public void testClassIsNotInstrumentedTwice() throws Exception {
+        var classToInstrument = ClassToInstrument.class;
+        var instrumenter = createInstrumenter(classToInstrument, "systemExit");
+
+        InstrumenterImpl.ClassFileInfo initial = getClassFileInfo(classToInstrument);
+        var internalClassName = Type.getInternalName(classToInstrument);
+
+        byte[] instrumentedBytecode = instrumenter.instrumentClass(internalClassName, initial.bytecodes());
+        byte[] instrumentedTwiceBytecode = instrumenter.instrumentClass(internalClassName, instrumentedBytecode);
+
+        logger.trace(() -> String.format("Bytecode after 1st instrumentation:\n%s", bytecode2text(instrumentedBytecode)));
+        logger.trace(() -> String.format("Bytecode after 2nd instrumentation:\n%s", bytecode2text(instrumentedTwiceBytecode)));
+
+        Class<?> newClass = new TestLoader(Testable.class.getClassLoader()).defineClassFromBytes(
+            ClassToInstrument.class.getName() + "_NEW_NEW",
+            instrumentedTwiceBytecode
+        );
+
+        getTestChecks().isActive = true;
+
+        assertThat(getTestChecks().checkSystemExitCallCount, is(0));
+        assertThrows(TestException.class, () -> callStaticSystemExit(newClass, 123));
+        assertThat(getTestChecks().checkSystemExitCallCount, is(1));
+    }
+
+    /** This test doesn't replace ClassToInstrument in-place but instead loads a separate
+     * class ClassToInstrument_NEW that contains the instrumentation. Because of this,
+     * we need to configure the Transformer to use a MethodKey and instrumentationMethod
+     * with slightly different signatures (using the common interface Testable) which
+     * is not what would happen when it's run by the agent.
+     */
+    private InstrumenterImpl createInstrumenter(Class<?> classToInstrument, String methodName) throws NoSuchMethodException {
+        MethodKey k1 = instrumentationService.methodKeyForTarget(classToInstrument.getMethod(methodName, int.class));
+        Method v1 = EntitlementChecks.class.getMethod("checkSystemExit", Class.class, int.class);
+        return new InstrumenterImpl("_NEW", Map.of(k1, v1));
     }
 
     /**
