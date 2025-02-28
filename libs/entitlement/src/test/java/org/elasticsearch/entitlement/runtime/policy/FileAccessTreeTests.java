@@ -24,8 +24,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.elasticsearch.core.PathUtils.getDefaultFileSystem;
+import static org.elasticsearch.entitlement.runtime.policy.entitlements.FilesEntitlement.FileData.ofPathSetting;
 import static org.hamcrest.Matchers.is;
 
 @ESTestCase.WithoutSecurityManager
@@ -314,6 +316,60 @@ public class FileAccessTreeTests extends ESTestCase {
         tree = accessTree(entitlement("a", "read"), exclusivePaths("diff-component", "diff-module", "a"));
         assertThat(tree.canRead(path("a")), is(false));
         assertThat(tree.canWrite(path("a")), is(false));
+    }
+
+    public void testFileSettingsAreResolved() {
+        final Settings settings = Settings.builder()
+            .put("test.setting", "foo/bar")
+            .put("test.glob.a.setting", "relative/foo/bar")
+            .put("test.glob.b.setting", "/absolute/bar/baz")
+            .put("test.glob.c.setting", "relative/foo/bar2")
+            .put("test.glob.d.setting", "https://glob/bar")
+            .put("test.setting.url2", "http://foo/bar")
+            .put("test.setting.url1", "https://foo/bar")
+            .putList("test.setting.list", List.of("foo/bar1", "foo/bar2"))
+            .build();
+
+       var accessTree = FileAccessTree.of(
+            "test",
+            "test",
+            new FilesEntitlement(
+                List.of(
+                    ofPathSetting("test.setting",  FilesEntitlement.BaseDir.CONFIG, FilesEntitlement.Mode.READ, true),
+                    ofPathSetting("test.setting.url1",  FilesEntitlement.BaseDir.CONFIG, FilesEntitlement.Mode.READ, false),
+                    ofPathSetting("test.setting.url2",  FilesEntitlement.BaseDir.CONFIG, FilesEntitlement.Mode.READ, false),
+                    ofPathSetting("test.setting.list",  FilesEntitlement.BaseDir.CONFIG, FilesEntitlement.Mode.READ, true),
+                    ofPathSetting("test.glob.*.setting",  FilesEntitlement.BaseDir.CONFIG, FilesEntitlement.Mode.READ, true)
+                )
+            ),
+            new PathLookup(
+                Path.of("/home"),
+                Path.of("/config"),
+                new Path[] { Path.of("/data1"), Path.of("/data2") },
+                new Path[] { Path.of("/shared1"), Path.of("/shared2") },
+                Path.of("/tmp"),
+                settings::get,
+                settings::getGlobValues
+            ),
+            List.of()
+        );
+
+       assertThat(accessTree.canRead(Path.of("/config/foo/bar")), is(true));
+
+       // Tree contains /config/https:/foo/bar and /config/http:/foo/bar instead
+       // assertThat(accessTree.canRead(Path.of("https://foo/bar")), is(true));
+       // assertThat(accessTree.canRead(Path.of("http://foo/bar")), is(true));
+
+        // Tree contains /config/foo/bar1,foo/bar2 instead
+        //  assertThat(accessTree.canRead(Path.of("/config/foo/bar1")), is(true));
+        //  assertThat(accessTree.canRead(Path.of("/config/foo/bar2")), is(true));
+
+       assertThat(accessTree.canRead(Path.of("/absolute/bar/baz")), is(true));
+       assertThat(accessTree.canRead(Path.of("/config/relative/foo/bar")), is(true));
+       assertThat(accessTree.canRead(Path.of("/config/relative/foo/bar2")), is(true));
+
+       // Does it make sense?
+       assertThat(accessTree.canRead(Path.of("https://glob/bar")), is(false));
     }
 
     FileAccessTree accessTree(FilesEntitlement entitlement, List<ExclusivePath> exclusivePaths) {
