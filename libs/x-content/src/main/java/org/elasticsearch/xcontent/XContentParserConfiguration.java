@@ -11,6 +11,7 @@ package org.elasticsearch.xcontent;
 
 import org.elasticsearch.core.RestApiVersion;
 import org.elasticsearch.xcontent.spi.XContentProvider;
+import org.elasticsearch.xcontent.support.filtering.FilterPath;
 
 import java.util.Set;
 
@@ -18,6 +19,13 @@ import java.util.Set;
  * Configuration for {@link XContentParser}.
  */
 public interface XContentParserConfiguration {
+
+    interface FilterConsumer {
+        void filterExcludes(FilterPath[] excludes, boolean filtersMatchFieldNamesWithDots);
+
+        void filterIncludes(FilterPath[] includes, boolean filtersMatchFieldNamesWithDots);
+    }
+
     /**
      * Creates parsers that don't support {@link XContentParser#namedObject},
      * throw an exception when they see deprecated fields, that return the

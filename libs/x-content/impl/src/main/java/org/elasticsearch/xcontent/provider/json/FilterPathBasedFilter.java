@@ -7,7 +7,7 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-package org.elasticsearch.xcontent.provider.filtering;
+package org.elasticsearch.xcontent.provider.json;
 
 import com.fasterxml.jackson.core.filter.TokenFilter;
 
@@ -17,7 +17,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class FilterPathBasedFilter extends TokenFilter {
+// TODO: consider making this independent from TokenFilter and introduce an adapter -- if needed. Otherwise this could be a
+// Jackson-specific class
+class FilterPathBasedFilter extends TokenFilter {
 
     /**
      * Marker value that should be used to indicate that a property name
@@ -47,7 +49,7 @@ public class FilterPathBasedFilter extends TokenFilter {
 
     private final boolean matchFieldNamesWithDots;
 
-    public FilterPathBasedFilter(FilterPath[] filters, boolean inclusive, boolean matchFieldNamesWithDots) {
+    FilterPathBasedFilter(FilterPath[] filters, boolean inclusive, boolean matchFieldNamesWithDots) {
         if (filters == null || filters.length == 0) {
             throw new IllegalArgumentException("filters cannot be null or empty");
         }
@@ -56,7 +58,7 @@ public class FilterPathBasedFilter extends TokenFilter {
         this.matchFieldNamesWithDots = matchFieldNamesWithDots;
     }
 
-    public FilterPathBasedFilter(Set<String> filters, boolean inclusive) {
+    FilterPathBasedFilter(Set<String> filters, boolean inclusive) {
         this(FilterPath.compile(filters), inclusive, false);
     }
 

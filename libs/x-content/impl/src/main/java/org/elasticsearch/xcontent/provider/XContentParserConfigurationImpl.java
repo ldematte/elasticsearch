@@ -9,14 +9,10 @@
 
 package org.elasticsearch.xcontent.provider;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
-
 import org.elasticsearch.core.RestApiVersion;
 import org.elasticsearch.xcontent.DeprecationHandler;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
-import org.elasticsearch.xcontent.provider.filtering.FilterPathBasedFilter;
 import org.elasticsearch.xcontent.support.filtering.FilterPath;
 
 import java.util.ArrayList;
@@ -176,24 +172,12 @@ public class XContentParserConfigurationImpl implements XContentParserConfigurat
         );
     }
 
-    public JsonParser filter(JsonParser parser) {
-        JsonParser filtered = parser;
+    public void filter(FilterConsumer filterConsumer) {
         if (excludes != null) {
-            filtered = new FilteringParserDelegate(
-                filtered,
-                new FilterPathBasedFilter(excludes, false, filtersMatchFieldNamesWithDots),
-                true,
-                true
-            );
+            filterConsumer.filterExcludes(excludes, filtersMatchFieldNamesWithDots);
         }
         if (includes != null) {
-            filtered = new FilteringParserDelegate(
-                filtered,
-                new FilterPathBasedFilter(includes, true, filtersMatchFieldNamesWithDots),
-                true,
-                true
-            );
+            filterConsumer.filterIncludes(includes, filtersMatchFieldNamesWithDots);
         }
-        return filtered;
     }
 }

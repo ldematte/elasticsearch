@@ -15,6 +15,7 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.exc.InputCoercionException;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
 import com.fasterxml.jackson.core.io.JsonEOFException;
 
 import org.elasticsearch.core.IOUtils;
@@ -25,17 +26,47 @@ import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xcontent.provider.XContentParserConfigurationImpl;
 import org.elasticsearch.xcontent.support.AbstractXContentParser;
+import org.elasticsearch.xcontent.support.filtering.FilterPath;
 
 import java.io.IOException;
 import java.nio.CharBuffer;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class JsonXContentParser extends AbstractXContentParser {
 
     final JsonParser parser;
 
-    public JsonXContentParser(XContentParserConfiguration config, JsonParser parser) {
+    protected JsonXContentParser(XContentParserConfiguration config, JsonParser parser) {
         super(config.registry(), config.deprecationHandler(), config.restApiVersion());
-        this.parser = ((XContentParserConfigurationImpl) config).filter(parser);
+
+        AtomicReference<JsonParser> filtered = new AtomicReference<>(parser);
+        ((XContentParserConfigurationImpl) config).filter(new XContentParserConfiguration.FilterConsumer() {
+            @Override
+            public void filterExcludes(FilterPath[] excludes, boolean filtersMatchFieldNamesWithDots) {
+                filtered.set(
+                    new FilteringParserDelegate(
+                        filtered.get(),
+                        new FilterPathBasedFilter(excludes, false, filtersMatchFieldNamesWithDots),
+                        true,
+                        true
+                    )
+                );
+            }
+
+            @Override
+            public void filterIncludes(FilterPath[] includes, boolean filtersMatchFieldNamesWithDots) {
+                filtered.set(
+                    new FilteringParserDelegate(
+                        filtered.get(),
+                        new FilterPathBasedFilter(includes, true, filtersMatchFieldNamesWithDots),
+                        true,
+                        true
+                    )
+                );
+            }
+        });
+
+        this.parser = filtered.get();
     }
 
     @Override
