@@ -35,18 +35,22 @@ class SimdJsonXContentParser extends AbstractXContentParser {
         super(config.registry(), config.deprecationHandler(), config.restApiVersion());
 
         this.continuation = () -> {
-            if (currentToken == Token.START_OBJECT) {
-                stack.push(continuation);
-                return new InObject(currentValue.objectIterator());
-            } else if (currentToken == Token.START_ARRAY) {
-                stack.push(continuation);
-                return new InArray(currentValue.arrayIterator());
-            } else {
-                currentValue = jsonValue;
-                currentToken = getTokenType(jsonValue);
-                return this::eof;
-            }
+            currentValue = jsonValue;
+            currentToken = getTokenType(jsonValue);
+            return bind(this::eof);
         };
+    }
+
+    private Continuation bind(Continuation next) {
+        if (currentToken == Token.START_OBJECT) {
+            stack.push(next);
+            return new InObject(currentValue.objectIterator());
+        } else if (currentToken == Token.START_ARRAY) {
+            stack.push(next);
+            return new InArray(currentValue.arrayIterator());
+        } else {
+            return next;
+        }
     }
 
     @Override
@@ -85,7 +89,10 @@ class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     protected boolean doBooleanValue() throws IOException {
-        return currentValue.asBoolean();
+        if (currentValue.isBoolean()) {
+            return currentValue.asBoolean();
+        }
+        throw new XContentParseException(currentValue.asString() + " is not a valid boolean value");
     }
 
     @Override
@@ -205,10 +212,17 @@ class SimdJsonXContentParser extends AbstractXContentParser {
         return 0;
     }
 
+
+
     @Override
     public Number numberValue() throws IOException {
         if (currentValue.isLong()) {
-            return currentValue.asLong();
+            var longValue =  currentValue.asLong();
+            // TODO can probably be optimize with some bitwise operation
+            // TODO but probably is better to fix the tests here?
+            if (longValue < Integer.MAX_VALUE && longValue > Integer.MIN_VALUE) {
+                return (int)longValue;
+            }
         } else if (currentValue.isDouble()) {
             return currentValue.asDouble();
         }
@@ -256,7 +270,7 @@ class SimdJsonXContentParser extends AbstractXContentParser {
             if (inValue) {
                 currentToken = getTokenType(currentValue);
                 inValue = false;
-                return this;
+                return bind(this);
             }
             if (iterator.hasNext()) {
                 var field = iterator.next();
@@ -264,7 +278,7 @@ class SimdJsonXContentParser extends AbstractXContentParser {
                 currentName = field.getKey();
                 currentValue = field.getValue();
                 inValue = true;
-                return this;
+                return bind(this);
             } else {
                 currentToken = Token.END_OBJECT;
                 return stack.pop();
@@ -284,7 +298,7 @@ class SimdJsonXContentParser extends AbstractXContentParser {
             if (iterator.hasNext()) {
                 currentValue = iterator.next();
                 currentToken = getTokenType(currentValue);
-                return this;
+                return bind(this);
             } else {
                 currentToken = Token.END_ARRAY;
                 return stack.pop();

@@ -18,10 +18,12 @@ import com.fasterxml.jackson.core.JsonParser;
 import org.elasticsearch.xcontent.XContent;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentGenerator;
+import org.elasticsearch.xcontent.XContentParseException;
 import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xcontent.provider.XContentImplUtils;
+import org.simdjson.JsonParsingException;
 import org.simdjson.JsonValue;
 import org.simdjson.SimdJsonParser;
 
@@ -102,8 +104,12 @@ public class JsonXContentImpl implements XContent {
 
     private XContentParser createSimdJsonParser(XContentParserConfiguration config, byte[] jsonContent, int length) {
         SimdJsonParser parser = new SimdJsonParser();
-        JsonValue jsonValue = parser.parse(jsonContent, length);
-        return new SimdJsonXContentParser(config, jsonValue);
+        try {
+            JsonValue jsonValue = parser.parse(jsonContent, length);
+            return new SimdJsonXContentParser(config, jsonValue);
+        } catch (JsonParsingException e) {
+            throw new XContentParseException(e.getMessage());
+        }
     }
 
     @Override
@@ -117,6 +123,7 @@ public class JsonXContentImpl implements XContent {
 
     @Override
     public XContentParser createParser(XContentParserConfiguration config, InputStream is) throws IOException {
+        // TODO: remove this
         if (USE_SIMD_JSON) {
             var x = is.readAllBytes();
             return createSimdJsonParser(config, x, x.length);

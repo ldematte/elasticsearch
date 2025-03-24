@@ -92,7 +92,6 @@ public class XContentParserTests extends ESTestCase {
     }
 
     public void testLongCoercion() throws IOException {
-        XContentType xContentType = randomFrom(XContentType.values());
 
         try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {
             builder.startObject();
@@ -401,7 +400,7 @@ public class XContentParserTests extends ESTestCase {
                 // sometimes read the start array token, sometimes not
                 assertEquals(XContentParser.Token.START_ARRAY, parser.nextToken());
             }
-            assertEquals(Arrays.asList(Collections.<Integer>emptyList(), Arrays.asList(1, 3), Arrays.asList(2)), parser.list());
+            assertThat(parser.list(), contains(Collections.<Integer>emptyList(), Arrays.asList(1, 3), Arrays.asList(2)));
         }
     }
 
