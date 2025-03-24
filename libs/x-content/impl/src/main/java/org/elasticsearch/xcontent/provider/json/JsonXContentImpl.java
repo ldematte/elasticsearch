@@ -22,17 +22,23 @@ import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xcontent.provider.XContentImplUtils;
+import org.simdjson.JsonValue;
+import org.simdjson.SimdJsonParser;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Set;
 
 /**
  * A JSON based content implementation using Jackson.
  */
 public class JsonXContentImpl implements XContent {
+
+    private static final boolean USE_SIMD_JSON = true;
 
     public static XContentBuilder getContentBuilder() throws IOException {
         return XContentBuilder.builder(jsonXContent);
@@ -87,30 +93,52 @@ public class JsonXContentImpl implements XContent {
         return new JsonXContentGenerator(jsonFactory.createGenerator(os, JsonEncoding.UTF8), os, includes, excludes);
     }
 
-    private XContentParser createParser(XContentParserConfiguration config, JsonParser parser) {
+    private XContentParser createJacksonParser(XContentParserConfiguration config, JsonParser parser) {
         if (config.includeSourceOnError() == false) {
             parser.disable(JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION); // enabled by default, disable if requested
         }
         return new JsonXContentParser(config, parser);
     }
 
+    private XContentParser createSimdJsonParser(XContentParserConfiguration config, byte[] jsonContent, int length) {
+        SimdJsonParser parser = new SimdJsonParser();
+        JsonValue jsonValue = parser.parse(jsonContent, length);
+        return new SimdJsonXContentParser(config, jsonValue);
+    }
+
     @Override
     public XContentParser createParser(XContentParserConfiguration config, String content) throws IOException {
-        return createParser(config, jsonFactory.createParser(content));
+        if (USE_SIMD_JSON) {
+            var x = content.getBytes(StandardCharsets.UTF_8);
+            return createSimdJsonParser(config, x, x.length);
+        }
+        return createJacksonParser(config, jsonFactory.createParser(content));
     }
 
     @Override
     public XContentParser createParser(XContentParserConfiguration config, InputStream is) throws IOException {
-        return createParser(config, jsonFactory.createParser(is));
+        if (USE_SIMD_JSON) {
+            var x = is.readAllBytes();
+            return createSimdJsonParser(config, x, x.length);
+        }
+        return createJacksonParser(config, jsonFactory.createParser(is));
     }
 
     @Override
     public XContentParser createParser(XContentParserConfiguration config, byte[] data, int offset, int length) throws IOException {
-        return createParser(config, jsonFactory.createParser(data, offset, length));
+        if (USE_SIMD_JSON) {
+            if (offset == 0) {
+                return createSimdJsonParser(config, data, length);
+            } else {
+                var x = Arrays.copyOfRange(data, offset, length);
+                return createSimdJsonParser(config, x, x.length);
+            }
+        }
+        return createJacksonParser(config, jsonFactory.createParser(data, offset, length));
     }
 
     @Override
     public XContentParser createParser(XContentParserConfiguration config, Reader reader) throws IOException {
-        return createParser(config, jsonFactory.createParser(reader));
+        return createJacksonParser(config, jsonFactory.createParser(reader));
     }
 }

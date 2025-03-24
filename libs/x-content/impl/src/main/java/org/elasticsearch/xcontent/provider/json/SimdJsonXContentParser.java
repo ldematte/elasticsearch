@@ -10,101 +10,179 @@
 package org.elasticsearch.xcontent.provider.json;
 
 import org.elasticsearch.xcontent.XContentLocation;
+import org.elasticsearch.xcontent.XContentParseException;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xcontent.support.AbstractXContentParser;
-import org.simdjson.SimdJsonParser;
+import org.simdjson.JsonValue;
 
 import java.io.IOException;
 import java.nio.CharBuffer;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Stack;
 
-public class SimdJsonXContentParser extends AbstractXContentParser {
+class SimdJsonXContentParser extends AbstractXContentParser {
 
-    SimdJsonParser parser = new SimdJsonParser();
+    private JsonValue currentValue;
+    private Token currentToken;
+    private CharSequence currentName;
+    private final Stack<Continuation> stack = new Stack<>();
 
-    SimdJsonXContentParser(XContentParserConfiguration config) {
+    private Continuation continuation;
+
+    SimdJsonXContentParser(XContentParserConfiguration config, JsonValue jsonValue) {
         super(config.registry(), config.deprecationHandler(), config.restApiVersion());
 
-    }
-
-    @Override
-    protected boolean doBooleanValue() throws IOException {
-        return false;
-    }
-
-    @Override
-    protected short doShortValue() throws IOException {
-        return 0;
-    }
-
-    @Override
-    protected int doIntValue() throws IOException {
-        return 0;
-    }
-
-    @Override
-    protected long doLongValue() throws IOException {
-        return 0;
-    }
-
-    @Override
-    protected float doFloatValue() throws IOException {
-        return 0;
-    }
-
-    @Override
-    protected double doDoubleValue() throws IOException {
-        return 0;
+        this.continuation = () -> {
+            if (currentToken == Token.START_OBJECT) {
+                stack.push(continuation);
+                return new InObject(currentValue.objectIterator());
+            } else if (currentToken == Token.START_ARRAY) {
+                stack.push(continuation);
+                return new InArray(currentValue.arrayIterator());
+            } else {
+                currentValue = jsonValue;
+                currentToken = getTokenType(jsonValue);
+                return this::eof;
+            }
+        };
     }
 
     @Override
     public XContentType contentType() {
-        return null;
-    }
-
-    @Override
-    public void allowDuplicateKeys(boolean allowDuplicateKeys) {
-
+        return XContentType.JSON;
     }
 
     @Override
     public Token nextToken() throws IOException {
-        return null;
+        continuation = continuation.run();
+        return currentToken;
+    }
+
+    interface Continuation {
+        Continuation run();
+    }
+
+    private Continuation eof() {
+        currentToken = null;
+        currentValue = null;
+        return this::eof;
+    }
+
+    private static Token getTokenType(JsonValue jsonValue) {
+        if (jsonValue == null) return null;
+        if (jsonValue.isArray()) return Token.START_ARRAY;
+        if (jsonValue.isObject()) return Token.START_OBJECT;
+        if (jsonValue.isBoolean()) return Token.VALUE_BOOLEAN;
+        if (jsonValue.isLong() || jsonValue.isDouble()) return Token.VALUE_NUMBER;
+        if (jsonValue.isString()) return Token.VALUE_STRING;
+        if (jsonValue.isNull()) return Token.VALUE_NULL;
+
+        // Token.VALUE_EMBEDDED_OBJECT;
+        throw new IllegalStateException("No matching token for json_token [" + jsonValue + "]");
+    }
+
+    @Override
+    protected boolean doBooleanValue() throws IOException {
+        return currentValue.asBoolean();
+    }
+
+    @Override
+    protected short doShortValue() throws IOException {
+        return (short) currentValue.asLong();
+    }
+
+    @Override
+    protected int doIntValue() throws IOException {
+        return (int) currentValue.asLong();
+    }
+
+    @Override
+    protected long doLongValue() throws IOException {
+        return currentValue.asLong();
+    }
+
+    @Override
+    protected float doFloatValue() throws IOException {
+        return (float) currentValue.asDouble();
+    }
+
+    @Override
+    protected double doDoubleValue() throws IOException {
+        return currentValue.asDouble();
+    }
+
+    @Override
+    public void allowDuplicateKeys(boolean allowDuplicateKeys) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void skipChildren() throws IOException {
-
+        this.continuation = stack.pop();
     }
 
     @Override
     public Token currentToken() {
-        return null;
+        return currentToken;
     }
 
     @Override
     public String currentName() throws IOException {
-        return "";
+        // TODO: probably this can be optimized/made better
+        return String.valueOf(currentName);
     }
 
     @Override
     public String text() throws IOException {
-        return "";
+        if (currentToken().isValue() == false) {
+            throwOnNoText();
+        }
+        return currentValue.asString();
+    }
+
+    private void throwOnNoText() {
+        throw new IllegalArgumentException("Expected text at " + getTokenLocation() + " but found " + currentToken());
     }
 
     @Override
     public CharBuffer charBuffer() throws IOException {
-        return null;
+        return CharBuffer.wrap(currentValue.asString());
     }
 
     @Override
     public Object objectText() throws IOException {
-        return null;
+        if (currentValue.isString()) {
+            return text();
+        } else if (currentValue.isLong()) {
+            return currentValue.asLong();
+        } else if (currentValue.isDouble()) {
+            return currentValue.asDouble();
+        } else if (currentValue.isBoolean()) {
+            return currentValue.asBoolean();
+        } else if (currentValue.isNull()) {
+            return null;
+        } else {
+            return text();
+        }
     }
 
     @Override
     public Object objectBytes() throws IOException {
-        return null;
+        if (currentValue.isString()) {
+            return charBuffer();
+        } else if (currentValue.isLong()) {
+            return currentValue.asLong();
+        } else if (currentValue.isDouble()) {
+            return currentValue.asDouble();
+        } else if (currentValue.isBoolean()) {
+            return currentValue.asBoolean();
+        } else if (currentValue.isNull()) {
+            return null;
+        } else {
+            return charBuffer();
+        }
     }
 
     @Override
@@ -114,12 +192,12 @@ public class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public char[] textCharacters() throws IOException {
-        return new char[0];
+        return currentValue.asString().toCharArray();
     }
 
     @Override
     public int textLength() throws IOException {
-        return 0;
+        return currentValue.asString().length();
     }
 
     @Override
@@ -129,22 +207,32 @@ public class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public Number numberValue() throws IOException {
-        return null;
+        if (currentValue.isLong()) {
+            return currentValue.asLong();
+        } else if (currentValue.isDouble()) {
+            return currentValue.asDouble();
+        }
+        throw new XContentParseException("the current token is not a number");
     }
 
     @Override
     public NumberType numberType() throws IOException {
-        return null;
+        if (currentValue.isLong()) {
+            return NumberType.LONG;
+        } else if (currentValue.isDouble()) {
+            return NumberType.DOUBLE;
+        }
+        throw new XContentParseException("the current token is not a number");
     }
 
     @Override
     public byte[] binaryValue() throws IOException {
-        return new byte[0];
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public XContentLocation getTokenLocation() {
-        return null;
+        return new XContentLocation(0, 0);
     }
 
     @Override
@@ -153,7 +241,54 @@ public class SimdJsonXContentParser extends AbstractXContentParser {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() throws IOException {}
 
+    private class InObject implements Continuation {
+        private final Iterator<Map.Entry<String, JsonValue>> iterator;
+        private boolean inValue = false;
+
+        InObject(Iterator<Map.Entry<String, JsonValue>> iterator) {
+            this.iterator = iterator;
+        }
+
+        @Override
+        public Continuation run() {
+            if (inValue) {
+                currentToken = getTokenType(currentValue);
+                inValue = false;
+                return this;
+            }
+            if (iterator.hasNext()) {
+                var field = iterator.next();
+                currentToken = Token.FIELD_NAME;
+                currentName = field.getKey();
+                currentValue = field.getValue();
+                inValue = true;
+                return this;
+            } else {
+                currentToken = Token.END_OBJECT;
+                return stack.pop();
+            }
+        }
+    }
+
+    private class InArray implements Continuation {
+        private final Iterator<JsonValue> iterator;
+
+        InArray(Iterator<JsonValue> iterator) {
+            this.iterator = iterator;
+        }
+
+        @Override
+        public Continuation run() {
+            if (iterator.hasNext()) {
+                currentValue = iterator.next();
+                currentToken = getTokenType(currentValue);
+                return this;
+            } else {
+                currentToken = Token.END_ARRAY;
+                return stack.pop();
+            }
+        }
     }
 }

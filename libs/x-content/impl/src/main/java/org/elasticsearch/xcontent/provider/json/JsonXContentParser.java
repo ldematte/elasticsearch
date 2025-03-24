@@ -74,6 +74,7 @@ public class JsonXContentParser extends AbstractXContentParser {
         return XContentType.JSON;
     }
 
+    // TODO: why an instance method? Should be a XContentParserConfiguration and used in construction
     @Override
     public void allowDuplicateKeys(boolean allowDuplicateKeys) {
         parser.configure(JsonParser.Feature.STRICT_DUPLICATE_DETECTION, allowDuplicateKeys == false);

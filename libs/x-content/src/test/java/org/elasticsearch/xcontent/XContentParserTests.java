@@ -9,6 +9,9 @@
 
 package org.elasticsearch.xcontent;
 
+import com.carrotsearch.randomizedtesting.annotations.Name;
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+
 import org.elasticsearch.common.CheckedSupplier;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -40,8 +43,18 @@ import static org.junit.internal.matchers.ThrowableMessageMatcher.hasMessage;
 
 public class XContentParserTests extends ESTestCase {
 
+    private final XContentType xContentType;
+
+    public XContentParserTests(@Name("contentType") XContentType xContentType) {
+        this.xContentType = xContentType;
+    }
+
+    @ParametersFactory
+    public static Iterable<Object[]> parameters() {
+        return Arrays.stream(XContentType.values()).map(v -> new Object[] { v }).toList();
+    }
+
     public void testFloat() throws IOException {
-        final XContentType xContentType = randomFrom(XContentType.values());
 
         final String field = randomAlphaOfLengthBetween(1, 5);
         final Float value = randomFloat();
