@@ -45,7 +45,7 @@ public class JsonParserBenchmark {
     @Param({ "cluster_stats", "index_stats", "node_stats", "many_string_fields", "simple_structure" })
     private String type;
 
-    private BytesReference source;
+    private byte[] source;
     private XContentParserConfiguration parserConfig;
 
     @Setup
@@ -58,7 +58,7 @@ public class JsonParserBenchmark {
             case "simple_structure" -> "tests.json";
             default -> throw new IllegalArgumentException("Unknown type [" + type + "]");
         };
-        source = readSource(sourceFile);
+        source = readSource(sourceFile).array();
         parserConfig = XContentParserConfiguration.EMPTY;
     }
 
@@ -69,7 +69,7 @@ public class JsonParserBenchmark {
     @Benchmark
     public int readAndSearchString() throws IOException {
         var matches = 0;
-        try (XContentParser parser = XContentType.JSON.xContent().createParser(parserConfig, source.streamInput())) {
+        try (XContentParser parser = XContentType.JSON.xContent().createParser(parserConfig, source)) {
             while (parser.nextToken() != null) {
                 if (parser.currentToken() == XContentParser.Token.VALUE_STRING) {
                     var value = parser.text();
@@ -89,7 +89,7 @@ public class JsonParserBenchmark {
     @Benchmark
     public int readAndSearchNumeric() throws IOException {
         var matches = 0;
-        try (XContentParser parser = XContentType.JSON.xContent().createParser(parserConfig, source.streamInput())) {
+        try (XContentParser parser = XContentType.JSON.xContent().createParser(parserConfig, source)) {
             while (parser.nextToken() != null) {
                 if (parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
                     var value = parser.numberValue();
@@ -117,7 +117,7 @@ public class JsonParserBenchmark {
      */
     @Benchmark
     public boolean readAndSearchField() throws IOException {
-        try (XContentParser parser = XContentType.JSON.xContent().createParser(parserConfig, source.streamInput())) {
+        try (XContentParser parser = XContentType.JSON.xContent().createParser(parserConfig, source)) {
             while (parser.nextToken() != null) {
                 if (parser.currentToken() == XContentParser.Token.FIELD_NAME) {
                     var fieldName = parser.currentName();
