@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
 @Fork(1)
 @Warmup(iterations = 1)
 @Measurement(iterations = 2)
-@BenchmarkMode({Mode.Throughput, Mode.AverageTime})
+@BenchmarkMode({ Mode.Throughput, Mode.AverageTime })
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @OperationsPerInvocation(25000)
 @State(Scope.Benchmark)
