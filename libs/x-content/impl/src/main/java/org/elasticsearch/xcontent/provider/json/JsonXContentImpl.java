@@ -40,7 +40,7 @@ import java.util.Set;
  */
 public class JsonXContentImpl implements XContent {
 
-    private static final boolean USE_SIMD_JSON = true;
+    private static final boolean USE_SIMD_JSON = false;
 
     public static XContentBuilder getContentBuilder() throws IOException {
         return XContentBuilder.builder(jsonXContent);

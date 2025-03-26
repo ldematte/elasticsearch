@@ -212,16 +212,14 @@ class SimdJsonXContentParser extends AbstractXContentParser {
         return 0;
     }
 
-
-
     @Override
     public Number numberValue() throws IOException {
         if (currentValue.isLong()) {
-            var longValue =  currentValue.asLong();
+            var longValue = currentValue.asLong();
             // TODO can probably be optimize with some bitwise operation
             // TODO but probably is better to fix the tests here?
             if (longValue < Integer.MAX_VALUE && longValue > Integer.MIN_VALUE) {
-                return (int)longValue;
+                return (int) longValue;
             }
         } else if (currentValue.isDouble()) {
             return currentValue.asDouble();
