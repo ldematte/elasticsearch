@@ -8,6 +8,7 @@
  */
 
 apply plugin: 'elasticsearch.build'
+apply plugin: 'elasticsearch.mrjar'
 
 base {
   archivesName = "x-content-impl"
@@ -18,6 +19,7 @@ String jacksonVersion = "2.17.2"
 dependencies {
   compileOnly project(':libs:core')
   compileOnly project(':libs:x-content')
+  compileOnly project(':libs:native')
   implementation "org.simdjson:simdjson-java:0.3.0"
   implementation "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"
   implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-smile:${jacksonVersion}"
