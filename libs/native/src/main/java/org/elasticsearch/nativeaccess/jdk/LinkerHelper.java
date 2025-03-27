@@ -20,7 +20,7 @@ import java.lang.invoke.MethodHandles;
 /**
  * Utility methods for calling into the native linker.
  */
-class LinkerHelper {
+public class LinkerHelper {
     private static final Linker LINKER = Linker.nativeLinker();
     private static final SymbolLookup SYMBOL_LOOKUP;
     private static final MethodHandles.Lookup MH_LOOKUP = MethodHandles.lookup();
@@ -37,7 +37,7 @@ class LinkerHelper {
         return SYMBOL_LOOKUP.find(function).orElseThrow(() -> new LinkageError("Native function " + function + " could not be found"));
     }
 
-    static MethodHandle downcallHandle(String function, FunctionDescriptor functionDescriptor, Linker.Option... options) {
+    public static MethodHandle downcallHandle(String function, FunctionDescriptor functionDescriptor, Linker.Option... options) {
         return LINKER.downcallHandle(functionAddress(function), functionDescriptor, options);
     }
 

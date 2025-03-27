@@ -19,12 +19,12 @@ import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 /**
  * Utility methods to act on Arena apis which have changed in subsequent JDK releases.
  */
-class ArenaUtil {
+public class ArenaUtil {
 
     /**
      * Allocate an array of the given memory layout.
      */
-    static MemorySegment allocate(Arena arena, MemoryLayout layout, int count) {
+    public static MemorySegment allocate(Arena arena, MemoryLayout layout, int count) {
         return arena.allocateArray(layout, count);
     }
 

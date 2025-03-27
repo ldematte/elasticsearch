@@ -21,7 +21,12 @@ module org.elasticsearch.nativeaccess {
             org.elasticsearch.server,
             org.elasticsearch.blobcache,
             org.elasticsearch.simdvec,
-            org.elasticsearch.systemd;
+            org.elasticsearch.systemd,
+            org.elasticsearch.xcontent.impl;
+
+    // TODO: put things in the right place
+    exports org.elasticsearch.nativeaccess.lib to org.elasticsearch.xcontent.impl;
+    exports org.elasticsearch.nativeaccess.jdk to org.elasticsearch.xcontent.impl;
 
     uses NativeLibraryProvider;
 

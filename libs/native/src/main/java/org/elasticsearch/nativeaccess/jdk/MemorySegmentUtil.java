@@ -17,9 +17,9 @@ import java.lang.invoke.VarHandle;
 /**
  * Utility methods to act on MemorySegment apis which have changed in subsequent JDK releases.
  */
-class MemorySegmentUtil {
+public class MemorySegmentUtil {
 
-    static String getString(MemorySegment segment, long offset) {
+    public static String getString(MemorySegment segment, long offset) {
         return segment.getUtf8String(offset);
     }
 

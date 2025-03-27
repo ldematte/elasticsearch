@@ -19,7 +19,7 @@ public class ArenaUtil {
     /**
      * Allocate an array of the given memory layout.
      */
-    static MemorySegment allocate(Arena arena, MemoryLayout layout, int count) {
+    public static MemorySegment allocate(Arena arena, MemoryLayout layout, int count) {
         return arena.allocate(layout, count);
     }
 

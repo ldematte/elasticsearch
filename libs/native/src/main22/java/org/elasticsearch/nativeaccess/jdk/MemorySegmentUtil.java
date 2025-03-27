@@ -15,9 +15,9 @@ import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 
-class MemorySegmentUtil {
+public class MemorySegmentUtil {
 
-    static String getString(MemorySegment segment, long offset) {
+    public static String getString(MemorySegment segment, long offset) {
         return segment.getString(offset);
     }
 
