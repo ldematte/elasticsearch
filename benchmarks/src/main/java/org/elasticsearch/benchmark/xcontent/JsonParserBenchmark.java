@@ -9,8 +9,6 @@
 
 package org.elasticsearch.benchmark.xcontent;
 
-import org.elasticsearch.common.bytes.BytesReference;
-import org.elasticsearch.common.io.Streams;
 import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
@@ -33,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Benchmarks for testing and comparing the performance of JsonXContentParser implementation(s)
  */
-@Fork(value = 1, jvmArgsPrepend = { "--add-modules=jdk.incubator.vector" })
+@Fork(value = 1, jvmArgsPrepend = { "--add-modules=jdk.incubator.vector", "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED" })
 @Warmup(iterations = 1)
 @Measurement(iterations = 2)
 @BenchmarkMode(Mode.Throughput)
@@ -58,7 +56,7 @@ public class JsonParserBenchmark {
             case "simple_structure" -> "tests.json";
             default -> throw new IllegalArgumentException("Unknown type [" + type + "]");
         };
-        source = readSource(sourceFile).array();
+        source = readSource(sourceFile);
         parserConfig = XContentParserConfiguration.EMPTY;
     }
 
@@ -130,7 +128,12 @@ public class JsonParserBenchmark {
         return false;
     }
 
-    private BytesReference readSource(String fileName) throws IOException {
-        return Streams.readFully(FilterContentBenchmark.class.getResourceAsStream(fileName));
+    private byte[] readSource(String fileName) throws IOException {
+        try (var stream = FilterContentBenchmark.class.getResourceAsStream(fileName)) {
+            if (stream == null) {
+                return null;
+            }
+            return stream.readAllBytes();
+        }
     }
 }
