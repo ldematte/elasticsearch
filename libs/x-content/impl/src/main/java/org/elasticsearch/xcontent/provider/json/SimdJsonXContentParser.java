@@ -18,39 +18,16 @@ import org.simdjson.JsonValue;
 
 import java.io.IOException;
 import java.nio.CharBuffer;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Stack;
 
 class SimdJsonXContentParser extends AbstractXContentParser {
 
-    private JsonValue currentValue;
+    private final JsonValue jsonValue;
     private Token currentToken;
     private CharSequence currentName;
-    private final Stack<Continuation> stack = new Stack<>();
-
-    private Continuation continuation;
 
     SimdJsonXContentParser(XContentParserConfiguration config, JsonValue jsonValue) {
         super(config.registry(), config.deprecationHandler(), config.restApiVersion());
-
-        this.continuation = () -> {
-            currentValue = jsonValue;
-            currentToken = getTokenType(jsonValue);
-            return bind(this::eof);
-        };
-    }
-
-    private Continuation bind(Continuation next) {
-        if (currentToken == Token.START_OBJECT) {
-            stack.push(next);
-            return new InObject(currentValue.objectIterator());
-        } else if (currentToken == Token.START_ARRAY) {
-            stack.push(next);
-            return new InArray(currentValue.arrayIterator());
-        } else {
-            return next;
-        }
+        this.jsonValue = jsonValue;
     }
 
     @Override
@@ -60,64 +37,63 @@ class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public Token nextToken() throws IOException {
-        continuation = continuation.run();
+        currentToken = translateToken(jsonValue.next());
+        if (currentToken == Token.FIELD_NAME) {
+            currentName = jsonValue.asString();
+        }
         return currentToken;
     }
 
-    interface Continuation {
-        Continuation run();
-    }
-
-    private Continuation eof() {
-        currentToken = null;
-        currentValue = null;
-        return this::eof;
-    }
-
-    private static Token getTokenType(JsonValue jsonValue) {
-        if (jsonValue == null) return null;
-        if (jsonValue.isArray()) return Token.START_ARRAY;
-        if (jsonValue.isObject()) return Token.START_OBJECT;
-        if (jsonValue.isBoolean()) return Token.VALUE_BOOLEAN;
-        if (jsonValue.isLong() || jsonValue.isDouble()) return Token.VALUE_NUMBER;
-        if (jsonValue.isString()) return Token.VALUE_STRING;
-        if (jsonValue.isNull()) return Token.VALUE_NULL;
-
-        // Token.VALUE_EMBEDDED_OBJECT;
-        throw new IllegalStateException("No matching token for json_token [" + jsonValue + "]");
+    private Token translateToken(char next) {
+        // TODO: a 128 elem lookup table
+        switch (next) {
+            case 'r': throw new IllegalStateException("nextToken not called yet");
+            case '[': return Token.START_ARRAY;
+            case '{': return Token.START_OBJECT;
+            case ']': return Token.END_ARRAY;
+            case '}': return Token.END_OBJECT;
+            case '"': return Token.VALUE_STRING;
+            case 'k': return Token.FIELD_NAME;
+            case 'l': return Token.VALUE_NUMBER;
+            case 'd': return Token.VALUE_NUMBER;
+            case 't': return Token.VALUE_BOOLEAN;
+            case 'f': return Token.VALUE_BOOLEAN;
+            case 'n': return Token.VALUE_NULL;
+        }
+        throw new IllegalStateException("Unknown token");
     }
 
     @Override
     protected boolean doBooleanValue() throws IOException {
-        if (currentValue.isBoolean()) {
-            return currentValue.asBoolean();
+        if (jsonValue.isBoolean()) {
+            return jsonValue.asBoolean();
         }
-        throw new XContentParseException(currentValue.asString() + " is not a valid boolean value");
+        throw new XContentParseException(jsonValue.asString() + " is not a valid boolean value");
     }
 
     @Override
     protected short doShortValue() throws IOException {
-        return (short) currentValue.asLong();
+        return (short) jsonValue.asLong();
     }
 
     @Override
     protected int doIntValue() throws IOException {
-        return (int) currentValue.asLong();
+        return (int) jsonValue.asLong();
     }
 
     @Override
     protected long doLongValue() throws IOException {
-        return currentValue.asLong();
+        return jsonValue.asLong();
     }
 
     @Override
     protected float doFloatValue() throws IOException {
-        return (float) currentValue.asDouble();
+        return (float) jsonValue.asDouble();
     }
 
     @Override
     protected double doDoubleValue() throws IOException {
-        return currentValue.asDouble();
+        return jsonValue.asDouble();
     }
 
     @Override
@@ -127,7 +103,7 @@ class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public void skipChildren() throws IOException {
-        this.continuation = stack.pop();
+        // TODO
     }
 
     @Override
@@ -146,7 +122,7 @@ class SimdJsonXContentParser extends AbstractXContentParser {
         if (currentToken().isValue() == false) {
             throwOnNoText();
         }
-        return currentValue.asString();
+        return jsonValue.asString();
     }
 
     private void throwOnNoText() {
@@ -155,20 +131,20 @@ class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public CharBuffer charBuffer() throws IOException {
-        return CharBuffer.wrap(currentValue.asString());
+        return CharBuffer.wrap(jsonValue.asString());
     }
 
     @Override
     public Object objectText() throws IOException {
-        if (currentValue.isString()) {
+        if (jsonValue.isString()) {
             return text();
-        } else if (currentValue.isLong()) {
-            return currentValue.asLong();
-        } else if (currentValue.isDouble()) {
-            return currentValue.asDouble();
-        } else if (currentValue.isBoolean()) {
-            return currentValue.asBoolean();
-        } else if (currentValue.isNull()) {
+        } else if (jsonValue.isLong()) {
+            return jsonValue.asLong();
+        } else if (jsonValue.isDouble()) {
+            return jsonValue.asDouble();
+        } else if (jsonValue.isBoolean()) {
+            return jsonValue.asBoolean();
+        } else if (jsonValue.isNull()) {
             return null;
         } else {
             return text();
@@ -177,15 +153,15 @@ class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public Object objectBytes() throws IOException {
-        if (currentValue.isString()) {
+        if (jsonValue.isString()) {
             return charBuffer();
-        } else if (currentValue.isLong()) {
-            return currentValue.asLong();
-        } else if (currentValue.isDouble()) {
-            return currentValue.asDouble();
-        } else if (currentValue.isBoolean()) {
-            return currentValue.asBoolean();
-        } else if (currentValue.isNull()) {
+        } else if (jsonValue.isLong()) {
+            return jsonValue.asLong();
+        } else if (jsonValue.isDouble()) {
+            return jsonValue.asDouble();
+        } else if (jsonValue.isBoolean()) {
+            return jsonValue.asBoolean();
+        } else if (jsonValue.isNull()) {
             return null;
         } else {
             return charBuffer();
@@ -199,12 +175,12 @@ class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public char[] textCharacters() throws IOException {
-        return currentValue.asString().toCharArray();
+        return jsonValue.asString().toCharArray();
     }
 
     @Override
     public int textLength() throws IOException {
-        return currentValue.asString().length();
+        return jsonValue.asString().length();
     }
 
     @Override
@@ -214,24 +190,24 @@ class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public Number numberValue() throws IOException {
-        if (currentValue.isLong()) {
-            var longValue = currentValue.asLong();
+        if (jsonValue.isLong()) {
+            var longValue = jsonValue.asLong();
             // TODO can probably be optimize with some bitwise operation
             // TODO but probably is better to fix the tests here?
             if (longValue < Integer.MAX_VALUE && longValue > Integer.MIN_VALUE) {
                 return (int) longValue;
             }
-        } else if (currentValue.isDouble()) {
-            return currentValue.asDouble();
+        } else if (jsonValue.isDouble()) {
+            return jsonValue.asDouble();
         }
         throw new XContentParseException("the current token is not a number");
     }
 
     @Override
     public NumberType numberType() throws IOException {
-        if (currentValue.isLong()) {
+        if (jsonValue.isLong()) {
             return NumberType.LONG;
-        } else if (currentValue.isDouble()) {
+        } else if (jsonValue.isDouble()) {
             return NumberType.DOUBLE;
         }
         throw new XContentParseException("the current token is not a number");
@@ -254,53 +230,4 @@ class SimdJsonXContentParser extends AbstractXContentParser {
 
     @Override
     public void close() throws IOException {}
-
-    private class InObject implements Continuation {
-        private final Iterator<Map.Entry<String, JsonValue>> iterator;
-        private boolean inValue = false;
-
-        InObject(Iterator<Map.Entry<String, JsonValue>> iterator) {
-            this.iterator = iterator;
-        }
-
-        @Override
-        public Continuation run() {
-            if (inValue) {
-                currentToken = getTokenType(currentValue);
-                inValue = false;
-                return bind(this);
-            }
-            if (iterator.hasNext()) {
-                var field = iterator.next();
-                currentToken = Token.FIELD_NAME;
-                currentName = field.getKey();
-                currentValue = field.getValue();
-                inValue = true;
-                return bind(this);
-            } else {
-                currentToken = Token.END_OBJECT;
-                return stack.pop();
-            }
-        }
-    }
-
-    private class InArray implements Continuation {
-        private final Iterator<JsonValue> iterator;
-
-        InArray(Iterator<JsonValue> iterator) {
-            this.iterator = iterator;
-        }
-
-        @Override
-        public Continuation run() {
-            if (iterator.hasNext()) {
-                currentValue = iterator.next();
-                currentToken = getTokenType(currentValue);
-                return bind(this);
-            } else {
-                currentToken = Token.END_ARRAY;
-                return stack.pop();
-            }
-        }
-    }
 }

@@ -14,13 +14,18 @@ base {
   archivesName = "x-content-impl"
 }
 
+repositories {
+  mavenCentral()
+  mavenLocal()
+}
+
 String jacksonVersion = "2.17.2"
 
 dependencies {
   compileOnly project(':libs:core')
   compileOnly project(':libs:x-content')
   compileOnly project(':libs:native')
-  implementation "org.simdjson:simdjson-java:0.3.0"
+  implementation "org.simdjson:simdjson-java:0.1.0-SNAPSHOT"
   implementation "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"
   implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-smile:${jacksonVersion}"
   implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${jacksonVersion}"
@@ -31,6 +36,8 @@ dependencies {
     exclude group: 'org.elasticsearch', module: 'x-content'
   }
 }
+
+tasks.named("javadoc").configure { enabled = false }
 
 tasks.named('forbiddenApisMain').configure {
   // x-content does not depend on server

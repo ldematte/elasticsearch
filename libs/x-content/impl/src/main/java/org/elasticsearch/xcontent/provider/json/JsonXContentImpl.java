@@ -111,13 +111,13 @@ public class JsonXContentImpl implements XContent {
         }
     }
 
-    private XContentParser createNativeSimdJsonParser(XContentParserConfiguration config, byte[] jsonContent, int offset, int length) {
+    /*private XContentParser createNativeSimdJsonParser(XContentParserConfiguration config, byte[] jsonContent, int offset, int length) {
         try {
             return NativeSimdJsonXContentParser.create(config, jsonContent, offset, length);
         } catch (JsonParsingException e) {
             throw new XContentParseException(e.getMessage());
         }
-    }
+    }*/
 
     @Override
     public XContentParser createParser(XContentParserConfiguration config, String content) throws IOException {
@@ -140,6 +140,7 @@ public class JsonXContentImpl implements XContent {
 
     @Override
     public XContentParser createParser(XContentParserConfiguration config, byte[] data, int offset, int length) throws IOException {
+        return createSimdJsonParser(config, data, length);
         // if (USE_SIMD_JSON) {
         // if (offset == 0) {
         // return createSimdJsonParser(config, data, length);
@@ -150,7 +151,7 @@ public class JsonXContentImpl implements XContent {
         // }
         // return createJacksonParser(config, jsonFactory.createParser(data, offset, length));
 
-        return createNativeSimdJsonParser(config, data, offset, length);
+        //return createNativeSimdJsonParser(config, data, offset, length);
     }
 
     @Override
