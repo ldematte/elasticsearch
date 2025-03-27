@@ -32,7 +32,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Set;
 
 /**
@@ -112,6 +111,14 @@ public class JsonXContentImpl implements XContent {
         }
     }
 
+    private XContentParser createNativeSimdJsonParser(XContentParserConfiguration config, byte[] jsonContent, int offset, int length) {
+        try {
+            return NativeSimdJsonXContentParser.create(config, jsonContent, offset, length);
+        } catch (JsonParsingException e) {
+            throw new XContentParseException(e.getMessage());
+        }
+    }
+
     @Override
     public XContentParser createParser(XContentParserConfiguration config, String content) throws IOException {
         if (USE_SIMD_JSON) {
@@ -133,15 +140,17 @@ public class JsonXContentImpl implements XContent {
 
     @Override
     public XContentParser createParser(XContentParserConfiguration config, byte[] data, int offset, int length) throws IOException {
-        if (USE_SIMD_JSON) {
-            if (offset == 0) {
-                return createSimdJsonParser(config, data, length);
-            } else {
-                var x = Arrays.copyOfRange(data, offset, length);
-                return createSimdJsonParser(config, x, x.length);
-            }
-        }
-        return createJacksonParser(config, jsonFactory.createParser(data, offset, length));
+//        if (USE_SIMD_JSON) {
+//            if (offset == 0) {
+//                return createSimdJsonParser(config, data, length);
+//            } else {
+//                var x = Arrays.copyOfRange(data, offset, length);
+//                return createSimdJsonParser(config, x, x.length);
+//            }
+//        }
+//        return createJacksonParser(config, jsonFactory.createParser(data, offset, length));
+
+        return createNativeSimdJsonParser(config, data, offset, length);
     }
 
     @Override

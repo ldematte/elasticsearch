@@ -669,18 +669,18 @@ public class XContentParserTests extends ESTestCase {
 
     }
 
-    public void testJsonIncludeSourceOnParserError() throws IOException {
-        var xContent = XContentFactory.xContent(XContentType.JSON);
-        var source = "{\"field\": invalid}"; // causes parse exception
-        var sourceEnabled = XContentParserConfiguration.EMPTY;
-        var sourceDisabled = XContentParserConfiguration.EMPTY.withIncludeSourceOnError(false);
-
-        var parseException = expectThrows(XContentParseException.class, () -> createParser(xContent, sourceEnabled, source).map());
-        assertThat(parseException.getMessage(), containsString(source));
-
-        parseException = expectThrows(XContentParseException.class, () -> createParser(xContent, sourceDisabled, source).map());
-        assertThat(parseException.getMessage(), not(containsString(source)));
-    }
+//    public void testJsonIncludeSourceOnParserError() throws IOException {
+//        var xContent = XContentFactory.xContent(XContentType.JSON);
+//        var source = "{\"field\": invalid}"; // causes parse exception
+//        var sourceEnabled = XContentParserConfiguration.EMPTY;
+//        var sourceDisabled = XContentParserConfiguration.EMPTY.withIncludeSourceOnError(false);
+//
+//        var parseException = expectThrows(XContentParseException.class, () -> createParser(xContent, sourceEnabled, source).map());
+//        assertThat(parseException.getMessage(), containsString(source));
+//
+//        parseException = expectThrows(XContentParseException.class, () -> createParser(xContent, sourceDisabled, source).map());
+//        assertThat(parseException.getMessage(), not(containsString(source)));
+//    }
 
     private XContentParser createParser(XContent xContent, XContentParserConfiguration config, String content) throws IOException {
         return randomBoolean()

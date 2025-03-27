@@ -16,5 +16,7 @@ module org.elasticsearch.xcontent.impl {
     requires org.elasticsearch.xcontent;
     requires simdjson.java;
 
+    requires org.elasticsearch.nativeaccess;
+
     provides org.elasticsearch.xcontent.spi.XContentProvider with org.elasticsearch.xcontent.provider.XContentProviderImpl;
 }

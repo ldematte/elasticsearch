@@ -1,14 +1,22 @@
+// Compile with:
+// g++ -std=c++20 -shared -fpic -o libsimdjson-bridge.dylib -I src/simdjson-bridge/headers/ src/simdjson-bridge/c/simd_json_bridge.cpp src/simdjson-bridge/c/simdjson.cpp -O3
+// cp ./libsimdjson-bridge.dylib ../../native/libraries/build/platform/darwin-aarch64
+// To verify:
+// objdump --macho --exports-trie ./libsimdjson-bridge.dylib
 
 #include "simdjson.h"
+#include "simd_json_bridge.h"
 #include "simd_json_bridge_internal.h"
 
 using namespace simdjson;
 
-void* create_parser_factory() {
+extern "C"
+EXPORT void* create_parser_factory() {
 	return (void*) new ondemand::parser();
 }
 
-void delete_parser_factory(void* factory) {
+extern "C"
+EXPORT void delete_parser_factory(void* factory) {
 	ondemand::parser* parser = (ondemand::parser*)factory;
 	delete parser;
 }
@@ -26,9 +34,10 @@ static int get_token_type(const ondemand::json_type& type) {
 		return VALUE_STRING;
 	case ondemand::json_type::boolean:
 		return VALUE_BOOLEAN;
-	//case ondemand::json_type::null:
+	case ondemand::json_type::null:
+	    return VALUE_NULL;
 	}
-    return VALUE_NULL;
+    return -1;
 }
 
 struct parser_state;
@@ -58,7 +67,7 @@ private:
 public:
 	InArray(const simdjson_result<ondemand::array_iterator>& begin, const simdjson_result<ondemand::array_iterator>& end)
 		: iterator(begin.value_unsafe()), end(end.value_unsafe()), need_advance(false) {
-		
+
 	}
 
 	virtual Continuation* run(parser_state* state) {
@@ -142,7 +151,7 @@ struct Init : public Continuation {
 	}
 };
 
-static Init INIT;
+Init INIT;
 
 // private
 static Continuation* bind(Continuation* next, parser_state* state) {
@@ -163,26 +172,61 @@ static Continuation* bind(Continuation* next, parser_state* state) {
 	}
 }
 
-
-void* create_parser(void* factory, std::string& padded_data) {
+extern "C"
+EXPORT void* create_parser(void* factory, void* padded_data, int32_t data_length, int32_t buffer_length) {
 	ondemand::parser* parser = (ondemand::parser*)factory;
 	parser_state* state = new parser_state();
-		
-	state->doc = parser->iterate(padded_data);
+
+	state->doc = parser->iterate((const uint8_t *) padded_data, (size_t) data_length, (size_t) buffer_length);
 	state->next = &INIT;
 
 	return state;
 }
 
-void delete_parser(void* current_state) {
+extern "C"
+EXPORT void delete_parser(void* current_state) {
 	parser_state* state = (parser_state*)current_state;
 	delete state;
 }
 
-int next_token(void* current_state) {
+extern "C"
+EXPORT int32_t next_token(void* current_state) {
 	parser_state* state = (parser_state*)current_state;
 	state->next = state->next->run(state);
 	return state->current_token;
+}
+
+extern "C"
+EXPORT const char* current_name(void* current_state, int32_t* size) {
+	parser_state* state = (parser_state*)current_state;
+	*size = state->current_name.length();
+	return state->current_name.data();
+}
+
+extern "C"
+EXPORT int64_t long_value(void* current_state) {
+   parser_state* state = (parser_state*)current_state;
+   return state->current_value.get_int64();
+}
+
+extern "C"
+EXPORT int32_t boolean_value(void* current_state) {
+    parser_state* state = (parser_state*)current_state;
+    return state->current_value.get_bool() ? 1 : 0;
+}
+
+extern "C"
+EXPORT double double_value(void* current_state) {
+    parser_state* state = (parser_state*)current_state;
+    return state->current_value.get_double();
+}
+
+extern "C"
+EXPORT const char* string_value(void* current_state, int32_t* size) {
+	parser_state* state = (parser_state*)current_state;
+	std::string_view string_view = state->current_value.get_string();
+	*size = string_view.length();
+	return string_view.data();
 }
 
 std::string_view get_text(void* current_state) {
@@ -192,7 +236,7 @@ std::string_view get_text(void* current_state) {
 
 // internal
 int current_token(void* current_state) {
-	parser_state* state = (parser_state*)current_state;	
+	parser_state* state = (parser_state*)current_state;
 	return state->current_token;
 }
 
