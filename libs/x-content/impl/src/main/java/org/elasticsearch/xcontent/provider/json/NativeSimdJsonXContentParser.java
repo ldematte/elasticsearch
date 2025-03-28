@@ -103,7 +103,7 @@ class NativeSimdJsonXContentParser extends AbstractXContentParser {
         try {
             MemorySegment factoryPointer = (MemorySegment) createFactory$mh.invokeExact();
             // SIMDJSON_PADDING = 64;
-            var arena = Arena.ofShared();
+            var arena = Arena.ofConfined();
             MemorySegment nativeBuffer = arena.allocate(length + 64, 256);
             MemorySegment.copy(jsonContent, offset, nativeBuffer, ValueLayout.JAVA_BYTE, 0, length);
             MemorySegment parserPointer = (MemorySegment) createParser$mh.invokeExact(factoryPointer, nativeBuffer, length, length + 64);
@@ -134,7 +134,7 @@ class NativeSimdJsonXContentParser extends AbstractXContentParser {
     public Token nextToken() throws IOException {
         try {
             var token = (int) nextToken$mh.invokeExact(parserPointer);
-            if (token == -1) {
+            if (token == -2) {
                 currentToken = null;
             } else {
                 currentToken = TOKENS[token];

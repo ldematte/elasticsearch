@@ -3,8 +3,6 @@
 // internal
 int current_token(void* parser);
 
-std::string_view get_text(void* parser);
-
 // internal
 enum Token {
 	START_OBJECT = 0,
@@ -17,5 +15,9 @@ enum Token {
 	VALUE_BOOLEAN = 7,
 	// usually a binary value
 	VALUE_EMBEDDED_OBJECT = 7,
-	VALUE_NULL = 8
+	VALUE_NULL = 8,
+
+	TOKEN_ERROR = -3,
+	TOKEN_BEGIN = -1,
+	TOKEN_END = -2
 };

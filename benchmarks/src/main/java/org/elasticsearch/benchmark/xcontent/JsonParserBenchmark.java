@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit;
 @Warmup(iterations = 1)
 @Measurement(iterations = 2)
 @BenchmarkMode(Mode.Throughput)
-@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
 @OperationsPerInvocation(25000)
 @State(Scope.Benchmark)
 public class JsonParserBenchmark {
