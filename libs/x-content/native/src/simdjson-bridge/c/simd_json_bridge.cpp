@@ -36,7 +36,8 @@ public:
 	const uint8_t* current_value;
 	std::string_view current_name;
 	
-	std::unique_ptr<uint8_t[]> string_buf{};
+	std::unique_ptr<uint8_t[]> current_name_buffer{};
+	std::unique_ptr<uint8_t[]> current_value_buffer{};
 	size_t capacity{};
 	std::unique_ptr<internal::dom_parser_implementation> parser{};
 	std::unique_ptr<builtin::stage2::json_iterator> iterator{};
@@ -51,7 +52,8 @@ public:
 error_code ParserState::allocate(size_t new_capacity) {
 	// string_capacity copied from document::allocate
 	size_t string_capacity = SIMDJSON_ROUNDUP_N(5 * new_capacity / 3 + SIMDJSON_PADDING, 64);
-	string_buf.reset(new (std::nothrow) uint8_t[string_capacity]);
+	current_name_buffer.reset(new (std::nothrow) uint8_t[string_capacity]);
+	current_value_buffer.reset(new (std::nothrow) uint8_t[string_capacity]);
 	if (auto error = parser->set_capacity(new_capacity)) { 
 		return error; 
 	}
@@ -119,7 +121,7 @@ static int next_valid_token(ParserState* state) {
 				return TOKEN_ERROR;
 			}
 			else {
-				auto ptr = state->string_buf.get();
+				auto ptr = state->current_name_buffer.get();
 				auto position = builtin::stringparsing::parse_string(value + 1, ptr, false);
 				state->current_name = std::string_view((const char*)ptr, (size_t)(position - ptr));
 				return FIELD_NAME;
@@ -191,7 +193,7 @@ EXPORT int next_token(void* parser_state) {
 		}
 		else {
 			state->current_token = FIELD_NAME;
-			auto ptr = state->string_buf.get();
+			auto ptr = state->current_name_buffer.get();
 			auto position = builtin::stringparsing::parse_string(value + 1, ptr, false);
 			state->current_name = std::string_view((const char*)ptr, (size_t)(position - ptr));
 		}
@@ -232,6 +234,13 @@ EXPORT int next_token(void* parser_state) {
 }
 
 extern "C"
+EXPORT const char* current_name(void* parser_state, int32_t* size) {
+	ParserState* state = (ParserState*)parser_state;
+	*size = (int32_t)state->current_name.length();
+	return state->current_name.data();
+}
+
+extern "C"
 EXPORT int32_t boolean_value(void* parser_state) {
 	ParserState* state = (ParserState*)parser_state;
 	auto value = state->current_value;
@@ -268,7 +277,8 @@ EXPORT double double_value(void* parser_state) {
 extern "C"
 EXPORT const char* string_value(void* parser_state, int32_t* size) {
 	ParserState* state = (ParserState*)parser_state;
-	auto ptr = state->string_buf.get();
+	// TODO: consider passing this in?
+	auto ptr = state->current_value_buffer.get();
 	auto position = builtin::stringparsing::parse_string(state->current_value + 1, ptr, false);
 	*size = (int32_t)(position - ptr);
 	return (const char*)ptr;
