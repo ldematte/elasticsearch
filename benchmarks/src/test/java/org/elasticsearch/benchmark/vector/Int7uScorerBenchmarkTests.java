@@ -18,8 +18,6 @@ import org.openjdk.jmh.annotations.Param;
 
 import java.util.Arrays;
 
-import static org.elasticsearch.benchmark.vector.BenchmarkUtils.supportsHeapSegments;
-
 public class Int7uScorerBenchmarkTests extends ESTestCase {
 
     final double delta = 1e-3;
@@ -44,7 +42,7 @@ public class Int7uScorerBenchmarkTests extends ESTestCase {
                 assertEquals(expected, bench.dotProductLucene(), delta);
                 assertEquals(expected, bench.dotProductNative(), delta);
 
-                if (supportsHeapSegments()) {
+                if (Int7uScorerBenchmark.supportsHeapSegments()) {
                     expected = bench.dotProductLuceneQuery();
                     assertEquals(expected, bench.dotProductNativeQuery(), delta);
                 }
@@ -64,7 +62,7 @@ public class Int7uScorerBenchmarkTests extends ESTestCase {
                 assertEquals(expected, bench.squareDistanceLucene(), delta);
                 assertEquals(expected, bench.squareDistanceNative(), delta);
 
-                if (supportsHeapSegments()) {
+                if (Int7uScorerBenchmark.supportsHeapSegments()) {
                     expected = bench.squareDistanceLuceneQuery();
                     assertEquals(expected, bench.squareDistanceNativeQuery(), delta);
                 }
