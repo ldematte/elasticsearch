@@ -128,7 +128,7 @@ static inline void dot7u_inner_bulk(
     size_t blk = dims & ~15;
     size_t c = 0;
 
-    // f32_t first_offset = int_bits_to_float(*((const int32_t*)(b + dims)));
+    f32_t second_offset = int_bits_to_float(*((const int32_t*)(b + dims)));
 
     // Process 4 vectors at a time
     for (; c + 3 < count; c += 4) {
@@ -192,17 +192,23 @@ static inline void dot7u_inner_bulk(
                 acc_scalar3 += a3[t] * bb;
             }
         }
-        // f32_t second_offset_0 = int_bits_to_float(*((const int32_t*)(a0 + dims)));
-        results[c + 0] = (f32_t)acc_scalar0;
-        results[c + 1] = (f32_t)acc_scalar1;
-        results[c + 2] = (f32_t)acc_scalar2;
-        results[c + 3] = (f32_t)acc_scalar3;
+        f32_t first_offset_0 = int_bits_to_float(*((const int32_t*)(a0 + dims)));
+        f32_t first_offset_1 = int_bits_to_float(*((const int32_t*)(a1 + dims)));
+        f32_t first_offset_2 = int_bits_to_float(*((const int32_t*)(a2 + dims)));
+        f32_t first_offset_3 = int_bits_to_float(*((const int32_t*)(a3 + dims)));
+
+        results[c + 0] = (f32_t)acc_scalar0 * score_correction + first_offset_0 + second_offset;
+        results[c + 1] = (f32_t)acc_scalar1 * score_correction + first_offset_1 + second_offset;
+        results[c + 2] = (f32_t)acc_scalar2 * score_correction + first_offset_2 + second_offset;
+        results[c + 3] = (f32_t)acc_scalar3 * score_correction + first_offset_3 + second_offset;
     }
 
     // Tail-handling: remaining 0..3 vectors
     for (; c < count; c++) {
         const int8_t* a0 = a + mapper(c, offsets) * pitch;
-        results[c] = (f32_t)vec_dot7u(a0, b, dims);
+        f32_t dot_product = (f32_t)vec_dot7u(a0, b, dims);
+        f32_t first_offset = int_bits_to_float(*((const int32_t*)(a0 + dims)));
+        results[c] = dot_product * score_correction + first_offset + second_offset;
     }
 }
 

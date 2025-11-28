@@ -263,17 +263,17 @@ public abstract sealed class Int7SQVectorScorerSupplier implements RandomVectorS
             );
 
             // Java-side adjustment
-            var aOffset = Float.intBitsToFloat(vectors.asSlice(firstByteOffset + vectorLength, Float.BYTES).get(ValueLayout.JAVA_INT, 0));
-            for (int i = 0; i < numNodes; ++i) {
-                var dotProduct = scores.getAtIndex(ValueLayout.JAVA_FLOAT, i);
-                var secondOrd = ordinals.getAtIndex(ValueLayout.JAVA_INT, i);
-                long secondByteOffset = (long) secondOrd * vectorPitch;
-                var bOffset = Float.intBitsToFloat(
-                    vectors.asSlice(secondByteOffset + vectorLength, Float.BYTES).getAtIndex(ValueLayout.JAVA_INT, 0)
-                );
-                float adjustedDistance = dotProduct * scoreCorrectionConstant + aOffset + bOffset;
-                scores.setAtIndex(ValueLayout.JAVA_FLOAT, i, Math.max((1 + adjustedDistance) / 2, 0f));
-            }
+//            var aOffset = Float.intBitsToFloat(vectors.asSlice(firstByteOffset + vectorLength, Float.BYTES).get(ValueLayout.JAVA_INT, 0));
+//            for (int i = 0; i < numNodes; ++i) {
+//                var dotProduct = scores.getAtIndex(ValueLayout.JAVA_FLOAT, i);
+//                var secondOrd = ordinals.getAtIndex(ValueLayout.JAVA_INT, i);
+//                long secondByteOffset = (long) secondOrd * vectorPitch;
+//                var bOffset = Float.intBitsToFloat(
+//                    vectors.asSlice(secondByteOffset + vectorLength, Float.BYTES).getAtIndex(ValueLayout.JAVA_INT, 0)
+//                );
+//                float adjustedDistance = dotProduct * scoreCorrectionConstant + aOffset + bOffset;
+//                scores.setAtIndex(ValueLayout.JAVA_FLOAT, i, Math.max((1 + adjustedDistance) / 2, 0f));
+//            }
         }
 
         @Override
