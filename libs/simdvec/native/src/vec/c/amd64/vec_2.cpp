@@ -24,6 +24,8 @@
 #pragma GCC target ("arch=skylake-avx512")
 #endif
 
+#define CACHE_LINE_SIZE 64
+
 // Includes for intrinsics
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -123,6 +125,12 @@ EXPORT int32_t vec_dot7u_2(const int8_t* a, const int8_t* b, const int32_t dims)
     return res;
 }
 
+static inline void prefetch(const void* ptr, int lines) {
+    for (int k = 0; k < lines; ++k) {
+        _mm_prefetch(ptr + (k * CACHE_LINE_SIZE), _MM_HINT_T0);
+    }
+}
+
 template <int64_t(*mapper)(int32_t, const int32_t*)>
 static inline void dot7u_inner_bulk(
     const int8_t* a,
@@ -133,26 +141,53 @@ static inline void dot7u_inner_bulk(
     const int32_t count,
     f32_t* results
 ) {
-    if (dims > STRIDE_BYTES_LEN) {
-        const int limit = dims & ~(STRIDE_BYTES_LEN - 1);
-        for (int32_t c = 0; c < count; c++) {
-            const int8_t* a0 = a + (mapper(c, offsets) * pitch);
-            int i = limit;
-            int32_t res = dot7u_inner_avx512(a0, b, i);
-            for (; i < dims; i++) {
-                res += a0[i] * b[i];
+    const int blk = dims & ~(STRIDE_BYTES_LEN - 1);
+    const int lines_to_fetch = dims / CACHE_LINE_SIZE + 1;
+    size_t c = 0;
+
+    // Process 4 vectors at a time
+    for (; c + 3 < count; c += 4) {
+        const int8_t* a0 = a + mapper(c + 0, offsets) * pitch;
+        const int8_t* a1 = a + mapper(c + 1, offsets) * pitch;
+        const int8_t* a2 = a + mapper(c + 2, offsets) * pitch;
+        const int8_t* a3 = a + mapper(c + 3, offsets) * pitch;
+
+        int32_t res0 = 0;
+        int32_t res1 = 0;
+        int32_t res2 = 0;
+        int32_t res3 = 0;
+        int i = 0;
+        if (dims > STRIDE_BYTES_LEN) {
+            i = blk;
+            prefetch(a1, lines_to_fetch);
+            res0 = dot7u_inner_avx512(a0, b, i);
+            prefetch(a2, lines_to_fetch);
+            res1 = dot7u_inner_avx512(a1, b, i);
+            prefetch(a3, lines_to_fetch);
+            res2 = dot7u_inner_avx512(a2, b, i);
+            if (c + 4 < count) {
+                const int8_t* next_a0 = a + mapper(c + 4, offsets) * pitch;
+                prefetch(next_a0, lines_to_fetch);
             }
-            results[c] = (f32_t)res;
+            res3 = dot7u_inner_avx512(a3, b, i);
         }
-    } else {
-        for (int32_t c = 0; c < count; c++) {
-            const int8_t* a0 = a + (mapper(c, offsets) * pitch);
-            int32_t res = 0;
-            for (int32_t i = 0; i < dims; i++) {
-                res += a0[i] * b[i];
-            }
-            results[c] = (f32_t)res;
+        for (; i < dims; i++) {
+            const int8_t bb = b[i];
+            res0 += a0[i] * bb;
+            res1 += a1[i] * bb;
+            res2 += a2[i] * bb;
+            res3 += a3[i] * bb;
         }
+        results[c + 0] = (f32_t)res0;
+        results[c + 1] = (f32_t)res1;
+        results[c + 2] = (f32_t)res2;
+        results[c + 3] = (f32_t)res3;
+    }
+
+    // Tail-handling: remaining 0..3 vectors
+    for (; c < count; c++) {
+        const int8_t* a0 = a + mapper(c, offsets) * pitch;
+        results[c] = (f32_t)vec_dot7u_2(a0, b, dims);
     }
 }
 

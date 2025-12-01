@@ -113,8 +113,6 @@ static inline void dot7u_inner_bulk(
     size_t blk = dims & ~15;
     size_t c = 0;
 
-    // f32_t first_offset = int_bits_to_float(*((const int32_t*)(b + dims)));
-
     // Process 4 vectors at a time
     for (; c + 3 < count; c += 4) {
         const int8_t* a0 = a + mapper(c, offsets) * pitch;
@@ -177,7 +175,6 @@ static inline void dot7u_inner_bulk(
                 acc_scalar3 += a3[t] * bb;
             }
         }
-        // f32_t second_offset_0 = int_bits_to_float(*((const int32_t*)(a0 + dims)));
         results[c + 0] = (f32_t)acc_scalar0;
         results[c + 1] = (f32_t)acc_scalar1;
         results[c + 2] = (f32_t)acc_scalar2;
