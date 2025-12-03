@@ -15,6 +15,7 @@
 #include <stddef.h>
 #include <arm_neon.h>
 #include <math.h>
+#include <assert.h>
 #include "vec.h"
 
 #ifndef DOT7U_STRIDE_BYTES_LEN
@@ -39,6 +40,9 @@
 
 EXPORT int vec_caps() {
 #ifdef __APPLE__
+    // Cache line size is 128 bytes on Apple M silicon
+    // Source: sysctl -a hw machdep.cpu | grep hw.cachelinesize
+    #define CACHE_LINE_SIZE 128
     #ifdef TARGET_OS_OSX
         // All M series Apple silicon support Neon instructions
         return 1;
@@ -46,11 +50,36 @@ EXPORT int vec_caps() {
         #error "Unsupported Apple platform"
     #endif
 #elif __linux__
+    // We mostly care about ARMv8a like Neoverse N1 (e.g. Graviton 2) and V1 (e.g. Graviton 3), and ARMv9a
+    // like Neoverse V2 (e.g. Graviton 4) architectures.
+    // They all have cache lines of 64 bytes. See:
+    // - https://developer.arm.com/documentation/100616/0401/L2-memory-system/About-the-L2-memory-system Graviton CPUs
+    // - https://documentation-service.arm.com/static/66ace927882fec713ef4819f
+    // - https://developer.arm.com/documentation/102375/latest
+    #define CACHE_LINE_SIZE 64
     int hwcap = getauxval(AT_HWCAP);
     return (hwcap & HWCAP_NEON) != 0;
 #else
     #error "Unsupported aarch64 platform"
 #endif
+}
+
+template <uintptr_t align>
+static inline uintptr_t align_downwards(const void* ptr) {
+    static_assert(align > 0 && (align & (align - 1)) == 0, "Align must be a power of 2");
+    assert(ptr != 0);
+
+    uintptr_t addr = (uintptr_t)ptr;
+    addr &= -align;                         // Round down to align-byte boundary
+    assert(addr <= (uintptr_t)ptr);
+    return addr;
+}
+
+static inline void prefetch(const void* ptr, int lines) {
+    const uintptr_t base = align_downwards<CACHE_LINE_SIZE>(ptr);
+    for (int k = 0; k < lines; ++k) {
+        __builtin_prefetch((void*)(base + k * CACHE_LINE_SIZE));
+    }
 }
 
 static inline int32_t dot7u_inner(const int8_t* a, const int8_t* b, const int32_t dims) {
@@ -100,6 +129,16 @@ EXPORT int32_t vec_dot7u(const int8_t* a, const int8_t* b, const int32_t dims) {
     return res;
 }
 
+template <int offset, int64_t(*mapper)(const int32_t, const int32_t*)>
+static inline const int8_t* init_pointer(
+    const int8_t* a,
+    const int32_t pitch,
+    const int32_t* offsets,
+    const int32_t count
+) {
+    return count > offset ? a + mapper(offset, offsets) * pitch : nullptr;
+}
+
 template <int64_t(*mapper)(const int32_t, const int32_t*)>
 static inline void dot7u_inner_bulk(
     const int8_t* a,
@@ -110,17 +149,26 @@ static inline void dot7u_inner_bulk(
     const int32_t count,
     f32_t* results
 ) {
-    size_t blk = dims & ~15;
-    size_t c = 0;
+    const int blk = dims & ~15;
+    const int lines_to_fetch = dims / CACHE_LINE_SIZE + 1;
+    int c = 0;
 
-    // f32_t first_offset = int_bits_to_float(*((const int32_t*)(b + dims)));
+    const int8_t* a0 = init_pointer<0, mapper>(a, pitch, offsets, count);
+    const int8_t* a1 = init_pointer<1, mapper>(a, pitch, offsets, count);
+    const int8_t* a2 = init_pointer<2, mapper>(a, pitch, offsets, count);
+    const int8_t* a3 = init_pointer<3, mapper>(a, pitch, offsets, count);
 
     // Process 4 vectors at a time
-    for (; c + 3 < count; c += 4) {
-        const int8_t* a0 = a + mapper(c, offsets) * pitch;
-        const int8_t* a1 = a + mapper(c + 1, offsets) * pitch;
-        const int8_t* a2 = a + mapper(c + 2, offsets) * pitch;
-        const int8_t* a3 = a + mapper(c + 3, offsets) * pitch;
+    for (; c + 7 < count; c += 4) {
+        const int8_t* next_a0 = a + mapper(c + 4, offsets) * pitch;
+        const int8_t* next_a1 = a + mapper(c + 5, offsets) * pitch;
+        const int8_t* next_a2 = a + mapper(c + 6, offsets) * pitch;
+        const int8_t* next_a3 = a + mapper(c + 7, offsets) * pitch;
+
+        prefetch(next_a0, lines_to_fetch);
+        prefetch(next_a1, lines_to_fetch);
+        prefetch(next_a2, lines_to_fetch);
+        prefetch(next_a3, lines_to_fetch);
 
         int32x4_t acc0 = vdupq_n_s32(0);
         int32x4_t acc1 = vdupq_n_s32(0);
@@ -182,9 +230,13 @@ static inline void dot7u_inner_bulk(
         results[c + 1] = (f32_t)acc_scalar1;
         results[c + 2] = (f32_t)acc_scalar2;
         results[c + 3] = (f32_t)acc_scalar3;
+        a0 = next_a0;
+        a1 = next_a1;
+        a2 = next_a2;
+        a3 = next_a3;
     }
 
-    // Tail-handling: remaining 0..3 vectors
+    // Tail-handling: remaining vectors
     for (; c < count; c++) {
         const int8_t* a0 = a + mapper(c, offsets) * pitch;
         results[c] = (f32_t)vec_dot7u(a0, b, dims);
