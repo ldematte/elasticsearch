@@ -70,7 +70,8 @@ static inline uintptr_t align_downwards(const void* ptr) {
     assert(ptr != 0);
 
     uintptr_t addr = (uintptr_t)ptr;
-    addr &= -align;                         // Round down to align-byte boundary
+    // Round down to align-byte boundary
+    addr &= -align;
     assert(addr <= (uintptr_t)ptr);
     return addr;
 }
@@ -139,7 +140,7 @@ static inline const int8_t* init_pointer(
     return count > offset ? a + mapper(offset, offsets) * pitch : nullptr;
 }
 
-template <int64_t(*mapper)(const int32_t, const int32_t*)>
+template <int64_t(*mapper)(const int32_t, const int32_t*), void(*prefetch_vector)(const void* ptr, int lines)>
 static inline void dot7u_inner_bulk(
     const int8_t* a,
     const int8_t* b,
@@ -165,10 +166,10 @@ static inline void dot7u_inner_bulk(
         const int8_t* next_a2 = a + mapper(c + 6, offsets) * pitch;
         const int8_t* next_a3 = a + mapper(c + 7, offsets) * pitch;
 
-        prefetch(next_a0, lines_to_fetch);
-        prefetch(next_a1, lines_to_fetch);
-        prefetch(next_a2, lines_to_fetch);
-        prefetch(next_a3, lines_to_fetch);
+        prefetch_vector(next_a0, lines_to_fetch);
+        prefetch_vector(next_a1, lines_to_fetch);
+        prefetch_vector(next_a2, lines_to_fetch);
+        prefetch_vector(next_a3, lines_to_fetch);
 
         int32x4_t acc0 = vdupq_n_s32(0);
         int32x4_t acc1 = vdupq_n_s32(0);
@@ -225,7 +226,6 @@ static inline void dot7u_inner_bulk(
                 acc_scalar3 += a3[t] * bb;
             }
         }
-        // f32_t second_offset_0 = int_bits_to_float(*((const int32_t*)(a0 + dims)));
         results[c + 0] = (f32_t)acc_scalar0;
         results[c + 1] = (f32_t)acc_scalar1;
         results[c + 2] = (f32_t)acc_scalar2;
@@ -251,8 +251,10 @@ static inline int64_t index(const int32_t i, const int32_t* offsets) {
    return offsets[i];
 }
 
+static inline void no_prefetch(const void* ptr, int lines) {}
+
 EXPORT void vec_dot7u_bulk(const int8_t* a, const int8_t* b, const int32_t dims, const int32_t count, f32_t* results) {
-    dot7u_inner_bulk<identity>(a, b, dims, dims, NULL, count, results);
+    dot7u_inner_bulk<identity, no_prefetch>(a, b, dims, dims, NULL, count, results);
 }
 
 
@@ -264,7 +266,7 @@ EXPORT void vec_dot7u_bulk_offsets(
     const int32_t* offsets,
     const int32_t count,
     f32_t* results) {
-    dot7u_inner_bulk<index>(a, b, dims, pitch, offsets, count, results);
+    dot7u_inner_bulk<index, prefetch>(a, b, dims, pitch, offsets, count, results);
 }
 
 static inline int32_t sqr7u_inner(int8_t *a, int8_t *b, const int32_t dims) {
