@@ -643,10 +643,10 @@ static inline void dot_int1_int4_inner_bulk(
             int64_t q2 = *((int64_t*)(query_j2 + r));
             int64_t q3 = *((int64_t*)(query_j3 + r));
 
-            subRet0_0 += __builtin_popcount(q0 & v1 & 0xFF);
-            subRet1_0 += __builtin_popcount(q1 & v1 & 0xFF);
-            subRet2_0 += __builtin_popcount(q2 & v1 & 0xFF);
-            subRet3_0 += __builtin_popcount(q3 & v1 & 0xFF);
+            subRet0_0 += __builtin_popcount(q0 & v0 & 0xFF);
+            subRet1_0 += __builtin_popcount(q1 & v0 & 0xFF);
+            subRet2_0 += __builtin_popcount(q2 & v0 & 0xFF);
+            subRet3_0 += __builtin_popcount(q3 & v0 & 0xFF);
 
             subRet0_1 += __builtin_popcount(q0 & v1 & 0xFF);
             subRet1_1 += __builtin_popcount(q1 & v1 & 0xFF);
@@ -654,7 +654,7 @@ static inline void dot_int1_int4_inner_bulk(
             subRet3_1 += __builtin_popcount(q3 & v1 & 0xFF);
         }
         results[c] = subRet0_0 + (subRet1_0 << 1) + (subRet2_0 << 2) + (subRet3_0 << 3);
-        results[c + 1] = subRet0_0 + (subRet1_0 << 1) + (subRet2_0 << 2) + (subRet3_0 << 3);
+        results[c + 1] = subRet0_1 + (subRet1_1 << 1) + (subRet2_1 << 2) + (subRet3_1 << 3);
     }
 
     for (; c < count; c++) {
