@@ -499,7 +499,6 @@ static inline int64_t dot_int1_int4_inner(const int8_t* a, const int8_t* query, 
             subRet1 += reduce_u8x16_neon(qDot1);
             subRet2 += reduce_u8x16_neon(qDot2);
             subRet3 += reduce_u8x16_neon(qDot3);
-
         }
     }
 
@@ -555,7 +554,110 @@ static inline void dot_int1_int4_inner_bulk(
     const int32_t count,
     f32_t* results
 ) {
-    for (size_t c = 0; c < count; c++) {
+
+    constexpr int chunk_size = sizeof(uint64x2_t);
+
+    const uint8_t* query_j0 = (const uint8_t*)query;
+    const uint8_t* query_j1 = (const uint8_t*)query + length;
+    const uint8_t* query_j2 = (const uint8_t*)query + 2 * length;
+    const uint8_t* query_j3 = (const uint8_t*)query + 3 * length;
+
+    const int iters = length / chunk_size;
+    const uint8x16_t zero = vcombine_u8(vcreate_u8(0), vcreate_u8(0));
+
+    int c = 0;
+
+    for (; c + 1 < count; c += 2) {
+        const uint8_t* a0 = (const uint8_t*)a + mapper(c, offsets) * pitch;
+        const uint8_t* a1 = (const uint8_t*)a + mapper(c + 1, offsets) * pitch;
+
+        int64_t subRet0_0 = 0;
+        int64_t subRet1_0 = 0;
+        int64_t subRet2_0 = 0;
+        int64_t subRet3_0 = 0;
+
+        int64_t subRet0_1 = 0;
+        int64_t subRet1_1 = 0;
+        int64_t subRet2_1 = 0;
+        int64_t subRet3_1 = 0;
+
+        int r = 0;
+
+        if (length >= chunk_size) {
+            for (int j = 0; j < iters;) {
+                uint8x16_t qDot0_0 = zero;
+                uint8x16_t qDot1_0 = zero;
+                uint8x16_t qDot2_0 = zero;
+                uint8x16_t qDot3_0 = zero;
+
+                uint8x16_t qDot0_1 = zero;
+                uint8x16_t qDot1_1 = zero;
+                uint8x16_t qDot2_1 = zero;
+                uint8x16_t qDot3_1 = zero;
+
+                /*
+                * After every 31 iterations we need to add the
+                * temporary sums (qDot0, qDot1, qDot2, qDot3) to the total sum.
+                * We must ensure that the temporary sums <= 255
+                * and 31 * 8 bits = 248 which is OK.
+                */
+                uint64_t limit = (j + 31 < iters) ? j + 31 : iters;
+                for (; j < limit; j++, r+= chunk_size)  {
+                    const uint8x16_t qv0 = vld1q_u8(query_j0 + r);
+                    const uint8x16_t qv1 = vld1q_u8(query_j1 + r);
+                    const uint8x16_t qv2 = vld1q_u8(query_j2 + r);
+                    const uint8x16_t qv3 = vld1q_u8(query_j3 + r);
+
+                    const uint8x16_t yv0 = vld1q_u8((const uint8_t*)a0 + r);
+                    const uint8x16_t yv1 = vld1q_u8((const uint8_t*)a1 + r);
+
+                    qDot0_0 = vaddq_u8(qDot0_0, vcntq_u8(vandq_u8(qv0,yv0)));
+                    qDot1_0 = vaddq_u8(qDot1_0, vcntq_u8(vandq_u8(qv1,yv0)));
+                    qDot2_0 = vaddq_u8(qDot2_0, vcntq_u8(vandq_u8(qv2,yv0)));
+                    qDot3_0 = vaddq_u8(qDot3_0, vcntq_u8(vandq_u8(qv3,yv0)));
+
+                    qDot0_1 = vaddq_u8(qDot0_1, vcntq_u8(vandq_u8(qv0,yv1)));
+                    qDot1_1 = vaddq_u8(qDot1_1, vcntq_u8(vandq_u8(qv1,yv1)));
+                    qDot2_1 = vaddq_u8(qDot2_1, vcntq_u8(vandq_u8(qv2,yv1)));
+                    qDot3_1 = vaddq_u8(qDot3_1, vcntq_u8(vandq_u8(qv3,yv1)));
+                }
+
+                subRet0_0 += reduce_u8x16_neon(qDot0_0);
+                subRet1_0 += reduce_u8x16_neon(qDot1_0);
+                subRet2_0 += reduce_u8x16_neon(qDot2_0);
+                subRet3_0 += reduce_u8x16_neon(qDot3_0);
+
+                subRet0_1 += reduce_u8x16_neon(qDot0_1);
+                subRet1_1 += reduce_u8x16_neon(qDot1_1);
+                subRet2_1 += reduce_u8x16_neon(qDot2_1);
+                subRet3_1 += reduce_u8x16_neon(qDot3_1);
+            }
+        }
+
+        for (; r < length; r++) {
+            int64_t v0 = *((int64_t*)(a0 + r));
+            int64_t v1 = *((int64_t*)(a1 + r));
+
+            int64_t q0 = *((int64_t*)(query_j0 + r));
+            int64_t q1 = *((int64_t*)(query_j1 + r));
+            int64_t q2 = *((int64_t*)(query_j2 + r));
+            int64_t q3 = *((int64_t*)(query_j3 + r));
+
+            subRet0_0 += __builtin_popcount(q0 & v1 & 0xFF);
+            subRet1_0 += __builtin_popcount(q1 & v1 & 0xFF);
+            subRet2_0 += __builtin_popcount(q2 & v1 & 0xFF);
+            subRet3_0 += __builtin_popcount(q3 & v1 & 0xFF);
+
+            subRet0_1 += __builtin_popcount(q0 & v1 & 0xFF);
+            subRet1_1 += __builtin_popcount(q1 & v1 & 0xFF);
+            subRet2_1 += __builtin_popcount(q2 & v1 & 0xFF);
+            subRet3_1 += __builtin_popcount(q3 & v1 & 0xFF);
+        }
+        results[c] = subRet0_0 + (subRet1_0 << 1) + (subRet2_0 << 2) + (subRet3_0 << 3);
+        results[c + 1] = subRet0_0 + (subRet1_0 << 1) + (subRet2_0 << 2) + (subRet3_0 << 3);
+    }
+
+    for (; c < count; c++) {
         const int8_t* a0 = a + mapper(c, offsets) * pitch;
         results[c] = (f32_t)dot_int1_int4_inner(a0, query, length);
     }
