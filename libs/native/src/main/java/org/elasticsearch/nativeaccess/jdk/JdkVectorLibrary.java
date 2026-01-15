@@ -33,7 +33,67 @@ import static org.elasticsearch.nativeaccess.jdk.LinkerHelper.downcallHandle;
 
 public final class JdkVectorLibrary implements VectorLibrary {
 
-    private record MH(MethodHandle ll, MethodHandle la, MethodHandle al, MethodHandle aa) {}
+    /**
+     * A record holding multiple method handles, binding to the same function with different argument layouts.
+     * <p>
+     * Java code will initiate the call passing two MemorySegments.
+     * Underneath, the C function is the same, accepting two pointer arguments.
+     * The invoke code is free to choose which {@link MethodHandle} to use, and pass down the memory addresses as either MemorySegments,
+     * longs, or a combination of the two.
+     * <p>
+     * The reason for passing down an address using {@link MemorySegment#address()} directly as a
+     * {@link java.lang.foreign.ValueLayout#JAVA_LONG} is that the JVM performs additional checks on {@link MemorySegment}s when they are
+     * shared (like we use in most cases), by injecting some additional code, including a CAS operation. This is generally OK, but in case
+     * of high performance code the overhead can be significant; the cost of a CAS operation on x64 is ~15-30 cycles. This cost is well
+     * amortized in case of bulk operations, but we measured up to a 30% slowdown on single scorers on x64.
+     * <p>
+     * However when {@link} some cases
+     *
+     * @param ll the {@link MethodHandle} to invoke the native function using longs for both addresses
+     * @param la the {@link MethodHandle} to invoke the native function using long for the first address and {@link MemorySegment} for
+     *           the second address
+     * @param al the {@link MethodHandle} to invoke the native function using {@link MemorySegment} for the first address and long for
+     *           the second address
+     * @param aa the {@link MethodHandle} to invoke the native function using {@link MemorySegment}s for both addresses
+     */
+    private record SingleVectorMethodHandles(MethodHandle ll, MethodHandle la, MethodHandle al, MethodHandle aa) {
+        private static FunctionDescriptor makeDescriptor(MemoryLayout resLayout, Stream<MemoryLayout> args, MemoryLayout... otherArgs) {
+            return FunctionDescriptor.of(resLayout, Stream.concat(args, Arrays.stream(otherArgs)).toArray(MemoryLayout[]::new));
+        }
+
+        static SingleVectorMethodHandles create(String functionName, MemoryLayout result) {
+            return new SingleVectorMethodHandles(
+                downcallHandle(
+                    functionName,
+                    makeDescriptor(result, Stream.of(JAVA_LONG, JAVA_LONG), JAVA_INT),
+                    LinkerHelperUtil.critical()
+                ),
+                downcallHandle(functionName, makeDescriptor(result, Stream.of(JAVA_LONG, ADDRESS), JAVA_INT), LinkerHelperUtil.critical()),
+                downcallHandle(functionName, makeDescriptor(result, Stream.of(ADDRESS, JAVA_LONG), JAVA_INT), LinkerHelperUtil.critical()),
+                downcallHandle(functionName, makeDescriptor(result, Stream.of(ADDRESS, ADDRESS), JAVA_INT), LinkerHelperUtil.critical())
+            );
+        }
+
+        public long invokeLong(MemorySegment a, MemorySegment query, int length) {
+            try {
+                var aAddress = a.address();
+                var queryAddress = query.address();
+
+                if (aAddress != 0) {
+                    if (queryAddress != 0) {
+                        return (long)ll.invokeExact(aAddress, queryAddress, length);
+                    }
+                    return (long)la.invokeExact(aAddress, query, length);
+                }
+                if (queryAddress != 0) {
+                    return (long)al.invokeExact(a, queryAddress, length);
+                }
+                return (long)aa.invokeExact(a, query, length);
+            } catch (Throwable t) {
+                throw new AssertionError(t);
+            }
+        }
+    }
 
     static final Logger logger = LogManager.getLogger(JdkVectorLibrary.class);
 
@@ -41,7 +101,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
     static final MethodHandle dot7uBulk$mh;
     static final MethodHandle dot7uBulkWithOffsets$mh;
 
-    static final MH doti1i4$mh;
+    static final SingleVectorMethodHandles doti1i4$mh;
     static final MethodHandle doti1i4Bulk$mh;
     static final MethodHandle doti1i4BulkWithOffsets$mh;
 
@@ -59,22 +119,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
 
     public static final JdkVectorSimilarityFunctions INSTANCE;
 
-    private static FunctionDescriptor makeDescriptor(MemoryLayout resLayout, Stream<MemoryLayout> args, MemoryLayout... otherArgs) {
-        return FunctionDescriptor.of(resLayout, Stream.concat(args, Arrays.stream(otherArgs)).toArray(MemoryLayout[]::new));
-    }
 
-    private static MH generateAddressParametersBindings(String functionName, MemoryLayout resLayout, MemoryLayout... otherArgs) {
-        return new MH(
-            downcallHandle(
-                functionName,
-                makeDescriptor(resLayout, Stream.of(JAVA_LONG, JAVA_LONG), otherArgs),
-                LinkerHelperUtil.critical()
-            ),
-            downcallHandle(functionName, makeDescriptor(resLayout, Stream.of(JAVA_LONG, ADDRESS), otherArgs), LinkerHelperUtil.critical()),
-            downcallHandle(functionName, makeDescriptor(resLayout, Stream.of(ADDRESS, JAVA_LONG), otherArgs), LinkerHelperUtil.critical()),
-            downcallHandle(functionName, makeDescriptor(resLayout, Stream.of(ADDRESS, ADDRESS), otherArgs), LinkerHelperUtil.critical())
-        );
-    }
 
     static {
         LoaderHelper.loadLibrary("vec");
@@ -102,7 +147,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
                 dot7uBulk$mh = downcallHandle("vec_dot7u_bulk" + suffix, bulk, LinkerHelperUtil.critical());
                 dot7uBulkWithOffsets$mh = downcallHandle("vec_dot7u_bulk_offsets" + suffix, bulkOffsets, LinkerHelperUtil.critical());
 
-                doti1i4$mh = generateAddressParametersBindings("vec_dot_int1_int4" + suffix, JAVA_LONG, JAVA_INT);
+                doti1i4$mh = SingleVectorMethodHandles.create("vec_dot_int1_int4" + suffix, JAVA_LONG);
                 doti1i4Bulk$mh = downcallHandle("vec_dot_int1_int4_bulk" + suffix, bulk, LinkerHelperUtil.critical());
                 doti1i4BulkWithOffsets$mh = downcallHandle(
                     "vec_dot_int1_int4_bulk_offsets" + suffix,
@@ -372,22 +417,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
         }
 
         private static long doti1i4(MemorySegment a, MemorySegment query, int length) {
-            try {
-                var aAddress = a.address();
-                var queryAddress = query.address();
-                if (aAddress != 0) {
-                    if (queryAddress != 0) {
-                        return (long) doti1i4$mh.ll.invokeExact(aAddress, queryAddress, length);
-                    }
-                    return (long) doti1i4$mh.la.invokeExact(aAddress, query, length);
-                }
-                if (queryAddress != 0) {
-                    return (long) doti1i4$mh.al.invokeExact(a, queryAddress, length);
-                }
-                return (long) doti1i4$mh.aa.invokeExact(a, query, length);
-            } catch (Throwable t) {
-                throw new AssertionError(t);
-            }
+            return doti1i4$mh.invokeLong(a, query, length);
         }
 
         private static void doti1i4Bulk(MemorySegment a, MemorySegment query, int length, int count, MemorySegment result) {
