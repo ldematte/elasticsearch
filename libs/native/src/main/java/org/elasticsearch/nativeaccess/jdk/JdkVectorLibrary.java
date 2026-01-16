@@ -227,7 +227,8 @@ public final class JdkVectorLibrary implements VectorLibrary {
         static long dotProductI1I4(MemorySegment a, MemorySegment query, int length) {
             Objects.checkFromIndexSize(0, length * 4L, (int) query.byteSize());
             Objects.checkFromIndexSize(0, length, (int) a.byteSize());
-            return doti1i4(a, query, length);
+            return callSingleDistanceLong(doti1i4$mh, a, query, length);
+            //return doti1i4(a, query, length);
         }
 
         static void dotProductI1I4Bulk(
@@ -395,27 +396,31 @@ public final class JdkVectorLibrary implements VectorLibrary {
             }
         }
 
-        private static long doti1i4(MemorySegment a, MemorySegment query, int length) {
+        private static long callSingleDistanceLong(MethodHandle mh, MemorySegment a, MemorySegment b, int length) {
             try {
                 var aAddress = a.isNative();
-                var queryAddress = query.isNative();
+                var queryAddress = b.isNative();
                 if (aAddress && queryAddress) {
                     try (var arena = Arena.ofConfined()) {
-                        return (long) doti1i4$mh.invokeExact(a.reinterpret(arena, null), query.reinterpret(arena, null), length);
+                        return (long) mh.invokeExact(a.reinterpret(arena, null), b.reinterpret(arena, null), length);
                     }
                 } else if (aAddress) {
                     try (var arena = Arena.ofConfined()) {
-                        return (long) doti1i4$mh.invokeExact(a.reinterpret(arena, null), query, length);
+                        return (long) mh.invokeExact(a.reinterpret(arena, null), b, length);
                     }
                 } else if (queryAddress) {
                     try (var arena = Arena.ofConfined()) {
-                        return (long) doti1i4$mh.invokeExact(a, query.reinterpret(arena, null), length);
+                        return (long) mh.invokeExact(a, b.reinterpret(arena, null), length);
                     }
                 }
-                return (long) doti1i4$mh.invokeExact(a, query, length);
+                return (long) mh.invokeExact(a, b, length);
             } catch (Throwable t) {
                 throw new AssertionError(t);
             }
+        }
+
+        private static long doti1i4(MemorySegment a, MemorySegment query, int length) {
+            return callSingleDistanceLong(doti1i4$mh, a, query, length);
         }
 
         private static void doti1i4Bulk(MemorySegment a, MemorySegment query, int length, int count, MemorySegment result) {
