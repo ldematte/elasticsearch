@@ -397,17 +397,17 @@ public final class JdkVectorLibrary implements VectorLibrary {
 
         private static long doti1i4(MemorySegment a, MemorySegment query, int length) {
             try {
-                var aAddress = a.address();
-                var queryAddress = query.address();
-                if (aAddress != 0 && queryAddress != 0) {
+                var aAddress = a.isNative();
+                var queryAddress = query.isNative();
+                if (aAddress && queryAddress) {
                     try (var arena = Arena.ofConfined()) {
                         return (long) doti1i4$mh.invokeExact(a.reinterpret(arena, null), query.reinterpret(arena, null), length);
                     }
-                } else if (aAddress != 0) {
+                } else if (aAddress) {
                     try (var arena = Arena.ofConfined()) {
                         return (long) doti1i4$mh.invokeExact(a.reinterpret(arena, null), query, length);
                     }
-                } else if (queryAddress != 0) {
+                } else if (queryAddress) {
                     try (var arena = Arena.ofConfined()) {
                         return (long) doti1i4$mh.invokeExact(a, query.reinterpret(arena, null), length);
                     }
