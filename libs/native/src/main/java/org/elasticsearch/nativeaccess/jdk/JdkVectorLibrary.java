@@ -15,6 +15,7 @@ import org.elasticsearch.nativeaccess.VectorSimilarityFunctions;
 import org.elasticsearch.nativeaccess.lib.LoaderHelper;
 import org.elasticsearch.nativeaccess.lib.VectorLibrary;
 
+import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
@@ -42,7 +43,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
     static final MethodHandle dot7uBulk$mh;
     static final MethodHandle dot7uBulkWithOffsets$mh;
 
-    static final MH doti1i4$mh;
+    static final MethodHandle doti1i4$mh;
     static final MethodHandle doti1i4Bulk$mh;
     static final MethodHandle doti1i4BulkWithOffsets$mh;
 
@@ -129,7 +130,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
                 dot7uBulk$mh = bindFunction("vec_dot7u_bulk", caps, bulk);
                 dot7uBulkWithOffsets$mh = bindFunction("vec_dot7u_bulk_offsets", caps, bulkOffsets);
 
-                doti1i4$mh = generateAddressParametersBindings("vec_dot_int1_int4", caps, JAVA_LONG, JAVA_INT);
+                doti1i4$mh = bindFunction("vec_dot_int1_int4", caps, FunctionDescriptor.of(JAVA_LONG, ADDRESS, ADDRESS, JAVA_INT));
                 doti1i4Bulk$mh = bindFunction("vec_dot_int1_int4_bulk", caps, bulk);
                 doti1i4BulkWithOffsets$mh = bindFunction("vec_dot_int1_int4_bulk_offsets", caps, bulkOffsets);
 
@@ -398,16 +399,20 @@ public final class JdkVectorLibrary implements VectorLibrary {
             try {
                 var aAddress = a.address();
                 var queryAddress = query.address();
-                if (aAddress != 0) {
-                    if (queryAddress != 0) {
-                        return (long) doti1i4$mh.ll.invokeExact(aAddress, queryAddress, length);
+                if (aAddress != 0 && queryAddress != 0) {
+                    try (var arena = Arena.ofConfined()) {
+                        return (long) doti1i4$mh.invokeExact(a.reinterpret(arena, null), query.reinterpret(arena, null), length);
                     }
-                    return (long) doti1i4$mh.la.invokeExact(aAddress, query, length);
+                } else if (aAddress != 0) {
+                    try (var arena = Arena.ofConfined()) {
+                        return (long) doti1i4$mh.invokeExact(a.reinterpret(arena, null), query, length);
+                    }
+                } else if (queryAddress != 0) {
+                    try (var arena = Arena.ofConfined()) {
+                        return (long) doti1i4$mh.invokeExact(a, query.reinterpret(arena, null), length);
+                    }
                 }
-                if (queryAddress != 0) {
-                    return (long) doti1i4$mh.al.invokeExact(a, queryAddress, length);
-                }
-                return (long) doti1i4$mh.aa.invokeExact(a, query, length);
+                return (long) doti1i4$mh.invokeExact(a, query, length);
             } catch (Throwable t) {
                 throw new AssertionError(t);
             }
