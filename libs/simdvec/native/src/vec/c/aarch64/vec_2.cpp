@@ -40,7 +40,7 @@ static inline int64_t dot_int1_int4_inner(const int8_t* a, const int8_t* query, 
     const uint64_t* query_j3 = (const uint64_t*)(query + 3 * length);
 
     const int reg_size = svcntd() * sizeof(int64_t);
-    const svbool_t all_vec = svptrue_b8();
+    const svbool_t all_vec = svptrue_b64();
 
     svuint64_t qDot0 = svdup_n_u64(0);
     svuint64_t qDot1 = svdup_n_u64(0);
@@ -49,18 +49,30 @@ static inline int64_t dot_int1_int4_inner(const int8_t* a, const int8_t* query, 
 
     int i = 0;
     int upperBound = length & ~(reg_size - 1);
-    for (; i < upperBound; i += reg_size) {
+    for (; i + 2 < upperBound; i += 2 * reg_size) {
 
-        svuint64_t a_vec = svld1_u64(all_vec, a0 + i);
+        svuint64_t a0_vec = svld1_u64(all_vec, a0 + i);
+        svuint64_t a1_vec = svld1_u64(all_vec, a0 + i + reg_size);
+
         svuint64_t q0_vec = svld1_u64(all_vec, query_j0 + i);
         svuint64_t q1_vec = svld1_u64(all_vec, query_j1 + i);
         svuint64_t q2_vec = svld1_u64(all_vec, query_j2 + i);
         svuint64_t q3_vec = svld1_u64(all_vec, query_j3 + i);
 
-        qDot0 = svadd_u64_z(all_vec, qDot0, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a_vec, q0_vec)));
-        qDot1 = svadd_u64_z(all_vec, qDot1, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a_vec, q1_vec)));
-        qDot2 = svadd_u64_z(all_vec, qDot2, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a_vec, q2_vec)));
-        qDot3 = svadd_u64_z(all_vec, qDot3, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a_vec, q3_vec)));
+        svuint64_t q0_vec1 = svld1_u64(all_vec, query_j0 + i + reg_size);
+        svuint64_t q1_vec1 = svld1_u64(all_vec, query_j1 + i + reg_size);
+        svuint64_t q2_vec1 = svld1_u64(all_vec, query_j2 + i + reg_size);
+        svuint64_t q3_vec1 = svld1_u64(all_vec, query_j3 + i + reg_size);
+
+        qDot0 = svadd_u64_z(all_vec, qDot0, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a0_vec, q0_vec)));
+        qDot1 = svadd_u64_z(all_vec, qDot1, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a0_vec, q1_vec)));
+        qDot2 = svadd_u64_z(all_vec, qDot2, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a0_vec, q2_vec)));
+        qDot3 = svadd_u64_z(all_vec, qDot3, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a0_vec, q3_vec)));
+
+        qDot0 = svadd_u64_z(all_vec, qDot0, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a1_vec, q0_vec1)));
+        qDot1 = svadd_u64_z(all_vec, qDot1, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a1_vec, q1_vec1)));
+        qDot2 = svadd_u64_z(all_vec, qDot2, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a1_vec, q2_vec1)));
+        qDot3 = svadd_u64_z(all_vec, qDot3, svcnt_u64_x(all_vec, svand_u64_m(all_vec, a1_vec, q3_vec1)));
     }
     subRet0 = svaddv_u64(all_vec, qDot0);
     subRet1 = svaddv_u64(all_vec, qDot1);
