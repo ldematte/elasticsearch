@@ -30,9 +30,6 @@
 #ifdef __linux__
     #include <sys/auxv.h>
     #include <asm/hwcap.h>
-    #ifndef HWCAP_NEON
-    #define HWCAP_NEON 0x1000
-    #endif
 #endif
 
 #ifdef __APPLE__
@@ -42,14 +39,25 @@
 EXPORT int vec_caps() {
 #ifdef __APPLE__
     #ifdef TARGET_OS_OSX
-        // All M series Apple silicon support Neon instructions
+        // All M series Apple silicon support Neon instructions; no SVE support as for now (M4)
         return 1;
     #else
         #error "Unsupported Apple platform"
     #endif
 #elif __linux__
     int hwcap = getauxval(AT_HWCAP);
-    return (hwcap & HWCAP_NEON) != 0;
+    int neon = (hwcap & HWCAP_ASIMD) != 0;
+    // https://docs.kernel.org/arch/arm64/sve.html
+    int sve = (hwcap & HWCAP_SVE) != 0;
+    int hwcap2 = getauxval(AT_HWCAP2);
+    int sve2 = (hwcap2 & HWCAP2_SVE2) != 0;
+    if (neon && sve) {
+        // On small register sizes, NEON is at least as fast as SVE.
+        // const int words_per_register = svcntb();
+        // return words_per_register > 32 ? 2 : 1;
+        return 2;
+    }
+    return neon;
 #else
     #error "Unsupported aarch64 platform"
 #endif
