@@ -33,11 +33,11 @@ static inline int64_t dot_int1_int4_inner(const int8_t* a, const int8_t* query, 
     int64_t subRet2 = 0;
     int64_t subRet3 = 0;
 
-    const uint8_t* a0 = (const uint64_t*)a;
-    const uint8_t* query_j0 = (const uint64_t*)query;
-    const uint8_t* query_j1 = (const uint64_t*)(query + length);
-    const uint8_t* query_j2 = (const uint64_t*)(query + 2 * length);
-    const uint8_t* query_j3 = (const uint64_t*)(query + 3 * length);
+    const uint64_t* a0 = (const uint64_t*)a;
+    const uint64_t* query_j0 = (const uint64_t*)query;
+    const uint64_t* query_j1 = (const uint64_t*)(query + length);
+    const uint64_t* query_j2 = (const uint64_t*)(query + 2 * length);
+    const uint64_t* query_j3 = (const uint64_t*)(query + 3 * length);
 
     const int reg_size = svcntd() * sizeof(int64_t);
     const svbool_t all_vec = svptrue_b8();
