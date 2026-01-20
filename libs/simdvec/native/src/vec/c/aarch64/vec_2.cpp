@@ -105,9 +105,11 @@ static inline void dot_int1_int4_inner_bulk(
 
     int c = 0;
 
-    for (; c + 1 < count; c += 2) {
+    for (; c + 3 < count; c += 4) {
         const uint64_t* a0 = (const uint64_t*)(a + mapper(c, offsets) * pitch);
         const uint64_t* a1 = (const uint64_t*)(a + mapper(c + 1, offsets) * pitch);
+        const uint64_t* a2 = (const uint64_t*)(a + mapper(c + 2, offsets) * pitch);
+        const uint64_t* a3 = (const uint64_t*)(a + mapper(c + 3, offsets) * pitch);
 
         int64_t subRet0_0 = 0;
         int64_t subRet1_0 = 0;
@@ -118,6 +120,16 @@ static inline void dot_int1_int4_inner_bulk(
         int64_t subRet1_1 = 0;
         int64_t subRet2_1 = 0;
         int64_t subRet3_1 = 0;
+
+        int64_t subRet0_2 = 0;
+        int64_t subRet1_2 = 0;
+        int64_t subRet2_2 = 0;
+        int64_t subRet3_2 = 0;
+
+        int64_t subRet0_3 = 0;
+        int64_t subRet1_3 = 0;
+        int64_t subRet2_3 = 0;
+        int64_t subRet3_3 = 0;
 
         int r = 0;
         if (length >= chunk_size) {
@@ -132,6 +144,16 @@ static inline void dot_int1_int4_inner_bulk(
             svuint64_t acc2_1 = svdup_n_u64(0);
             svuint64_t acc3_1 = svdup_n_u64(0);
 
+            svuint64_t acc0_2 = svdup_n_u64(0);
+            svuint64_t acc1_2 = svdup_n_u64(0);
+            svuint64_t acc2_2 = svdup_n_u64(0);
+            svuint64_t acc3_2 = svdup_n_u64(0);
+
+            svuint64_t acc0_3 = svdup_n_u64(0);
+            svuint64_t acc1_3 = svdup_n_u64(0);
+            svuint64_t acc2_3 = svdup_n_u64(0);
+            svuint64_t acc3_3 = svdup_n_u64(0);
+
             int upperBound = length & ~(chunk_size - 1);
             for (; r < upperBound; r += chunk_size) {
                 const svuint64_t q0 = svld1_u64(all_vec, query_j0 + r);
@@ -141,6 +163,8 @@ static inline void dot_int1_int4_inner_bulk(
 
                 const svuint64_t v0 = svld1_u64(all_vec, a0 + r);
                 const svuint64_t v1 = svld1_u64(all_vec, a1 + r);
+                const svuint64_t v2 = svld1_u64(all_vec, a2 + r);
+                const svuint64_t v3 = svld1_u64(all_vec, a3 + r);
 
                 acc0_0 = svadd_u64_z(all_vec, acc0_0, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v0, q0)));
                 acc1_0 = svadd_u64_z(all_vec, acc1_0, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v0, q1)));
@@ -151,6 +175,16 @@ static inline void dot_int1_int4_inner_bulk(
                 acc1_1 = svadd_u64_z(all_vec, acc1_1, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v1, q1)));
                 acc2_1 = svadd_u64_z(all_vec, acc2_1, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v1, q2)));
                 acc3_1 = svadd_u64_z(all_vec, acc3_1, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v1, q3)));
+
+                acc0_2 = svadd_u64_z(all_vec, acc0_2, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v2, q0)));
+                acc1_2 = svadd_u64_z(all_vec, acc1_2, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v2, q1)));
+                acc2_2 = svadd_u64_z(all_vec, acc2_2, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v2, q2)));
+                acc3_2 = svadd_u64_z(all_vec, acc3_2, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v2, q3)));
+
+                acc0_3 = svadd_u64_z(all_vec, acc0_3, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v3, q0)));
+                acc1_3 = svadd_u64_z(all_vec, acc1_3, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v3, q1)));
+                acc2_3 = svadd_u64_z(all_vec, acc2_3, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v3, q2)));
+                acc3_3 = svadd_u64_z(all_vec, acc3_3, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v3, q3)));
             }
 
             subRet0_0 += svaddv_u64(all_vec, acc0_0);
@@ -162,10 +196,22 @@ static inline void dot_int1_int4_inner_bulk(
             subRet1_1 += svaddv_u64(all_vec, acc1_1);
             subRet2_1 += svaddv_u64(all_vec, acc2_1);
             subRet3_1 += svaddv_u64(all_vec, acc3_1);
+
+            subRet0_2 += svaddv_u64(all_vec, acc0_2);
+            subRet1_2 += svaddv_u64(all_vec, acc1_2);
+            subRet2_2 += svaddv_u64(all_vec, acc2_2);
+            subRet3_2 += svaddv_u64(all_vec, acc3_2);
+
+            subRet0_3 += svaddv_u64(all_vec, acc0_3);
+            subRet1_3 += svaddv_u64(all_vec, acc1_3);
+            subRet2_3 += svaddv_u64(all_vec, acc2_3);
+            subRet3_3 += svaddv_u64(all_vec, acc3_3);
         }
         for (; r < length; r++) {
             int64_t v0 = *((int64_t*)(a0 + r));
             int64_t v1 = *((int64_t*)(a1 + r));
+            int64_t v2 = *((int64_t*)(a2 + r));
+            int64_t v3 = *((int64_t*)(a3 + r));
 
             int64_t q0 = *((int64_t*)(query_j0 + r));
             int64_t q1 = *((int64_t*)(query_j1 + r));
@@ -181,9 +227,21 @@ static inline void dot_int1_int4_inner_bulk(
             subRet1_1 += __builtin_popcount(q1 & v1 & 0xFF);
             subRet2_1 += __builtin_popcount(q2 & v1 & 0xFF);
             subRet3_1 += __builtin_popcount(q3 & v1 & 0xFF);
+
+            subRet0_2 += __builtin_popcount(q0 & v2 & 0xFF);
+            subRet1_2 += __builtin_popcount(q1 & v2 & 0xFF);
+            subRet2_2 += __builtin_popcount(q2 & v2 & 0xFF);
+            subRet3_2 += __builtin_popcount(q3 & v2 & 0xFF);
+
+            subRet0_3 += __builtin_popcount(q0 & v3 & 0xFF);
+            subRet1_3 += __builtin_popcount(q1 & v3 & 0xFF);
+            subRet2_3 += __builtin_popcount(q2 & v3 & 0xFF);
+            subRet3_3 += __builtin_popcount(q3 & v3 & 0xFF);
         }
         results[c] = subRet0_0 + (subRet1_0 << 1) + (subRet2_0 << 2) + (subRet3_0 << 3);
         results[c + 1] = subRet0_1 + (subRet1_1 << 1) + (subRet2_1 << 2) + (subRet3_1 << 3);
+        results[c + 2] = subRet0_2 + (subRet1_2 << 1) + (subRet2_2 << 2) + (subRet3_2 << 3);
+        results[c + 3] = subRet0_3 + (subRet1_3 << 1) + (subRet2_3 << 2) + (subRet3_3 << 3);
     }
 
     for (; c < count; c++) {
