@@ -87,21 +87,15 @@ static inline void dot_int1_int4_inner_bulk(
     f32_t* results
 ) {
     const int chunk_size = svcntd() * sizeof(int64_t);
-
-    const uint64_t* query_j0 = (const uint64_t*)query;
-    const uint64_t* query_j1 = (const uint64_t*)(query + length);
-    const uint64_t* query_j2 = (const uint64_t*)(query + 2 * length);
-    const uint64_t* query_j3 = (const uint64_t*)(query + 3 * length);
-
     const svbool_t all_vec = svptrue_b64();
 
     int c = 0;
 
     for (; c + 3 < count; c += 4) {
-        const uint64_t* a0 = (const uint64_t*)(a + mapper(c, offsets) * pitch);
-        const uint64_t* a1 = (const uint64_t*)(a + mapper(c + 1, offsets) * pitch);
-        const uint64_t* a2 = (const uint64_t*)(a + mapper(c + 2, offsets) * pitch);
-        const uint64_t* a3 = (const uint64_t*)(a + mapper(c + 3, offsets) * pitch);
+        const int8_t* a0 = a + mapper(c, offsets) * pitch;
+        const int8_t* a1 = a + mapper(c + 1, offsets) * pitch;
+        const int8_t* a2 = a + mapper(c + 2, offsets) * pitch;
+        const int8_t* a3 = a + mapper(c + 3, offsets) * pitch;
 
         int64_t subRet0_0 = 0;
         int64_t subRet1_0 = 0;
@@ -148,15 +142,15 @@ static inline void dot_int1_int4_inner_bulk(
 
             int upperBound = length & ~(chunk_size - 1);
             for (; r < upperBound; r += chunk_size) {
-                const svuint64_t q0 = svld1_u64(all_vec, query_j0 + r);
-                const svuint64_t q1 = svld1_u64(all_vec, query_j1 + r);
-                const svuint64_t q2 = svld1_u64(all_vec, query_j2 + r);
-                const svuint64_t q3 = svld1_u64(all_vec, query_j3 + r);
+                const svuint64_t q0 = svld1_u64(all_vec, (const uint64_t*)(query + r));
+                const svuint64_t q1 = svld1_u64(all_vec, (const uint64_t*)(query + r + length));
+                const svuint64_t q2 = svld1_u64(all_vec, (const uint64_t*)(query + r + 2 * length));
+                const svuint64_t q3 = svld1_u64(all_vec, (const uint64_t*)(query + r + 3 * length));
 
-                const svuint64_t v0 = svld1_u64(all_vec, a0 + r);
-                const svuint64_t v1 = svld1_u64(all_vec, a1 + r);
-                const svuint64_t v2 = svld1_u64(all_vec, a2 + r);
-                const svuint64_t v3 = svld1_u64(all_vec, a3 + r);
+                const svuint64_t v0 = svld1_u64(all_vec, (const uint64_t*)(a0 + r));
+                const svuint64_t v1 = svld1_u64(all_vec, (const uint64_t*)(a1 + r));
+                const svuint64_t v2 = svld1_u64(all_vec, (const uint64_t*)(a2 + r));
+                const svuint64_t v3 = svld1_u64(all_vec, (const uint64_t*)(a3 + r));
 
                 acc0_0 = svadd_u64_z(all_vec, acc0_0, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v0, q0)));
                 acc1_0 = svadd_u64_z(all_vec, acc1_0, svcnt_u64_x(all_vec, svand_u64_m(all_vec, v0, q1)));
@@ -205,10 +199,10 @@ static inline void dot_int1_int4_inner_bulk(
             int64_t v2 = *((int64_t*)(a2 + r));
             int64_t v3 = *((int64_t*)(a3 + r));
 
-            int64_t q0 = *((int64_t*)(query_j0 + r));
-            int64_t q1 = *((int64_t*)(query_j1 + r));
-            int64_t q2 = *((int64_t*)(query_j2 + r));
-            int64_t q3 = *((int64_t*)(query_j3 + r));
+            int64_t q0 = *((int64_t*)(query + r));
+            int64_t q1 = *((int64_t*)(query + r + length));
+            int64_t q2 = *((int64_t*)(query + r + 2 * length));
+            int64_t q3 = *((int64_t*)(query + r + 3 * length));
 
             subRet0_0 += __builtin_popcount(q0 & v0 & 0xFF);
             subRet1_0 += __builtin_popcount(q1 & v0 & 0xFF);
