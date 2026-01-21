@@ -29,8 +29,7 @@
 
 static inline svuint64_t dot_bit_sv(const svuint64_t a, const int8_t* b) {
     const svuint64_t q0 = svld1_u64(svptrue_b64(), (const uint64_t*)b);
-    return _mm512_popcnt_epi64(_mm512_and_si512(q0, a));
-    return svcnt_u64_x(svptrue_b64(), svand_u64_m(svptrue_b64(), q0, a)));
+    return svcnt_u64_x(svptrue_b64(), svand_u64_m(svptrue_b64(), q0, a));
 }
 
 static inline int64_t dot_int1_int4_inner(const int8_t* a, const int8_t* query, const int32_t length) {
@@ -47,10 +46,10 @@ static inline int64_t dot_int1_int4_inner(const int8_t* a, const int8_t* query, 
     for (; r < upperBound; r += sizeof_sv) {
         const svuint64_t value = svld1_u64(svptrue_b64(), (const uint64_t*)(a + r));
 
-        acc0 = svadd_u64_z(svptrue_b64(), acc0, dot_bit_512(value, query + r));
-        acc1 = svadd_u64_z(svptrue_b64(), acc1, dot_bit_512(value, query + r + length));
-        acc2 = svadd_u64_z(svptrue_b64(), acc2, dot_bit_512(value, query + r + 2 * length));
-        acc3 = svadd_u64_z(svptrue_b64(), acc3, dot_bit_512(value, query + r + 3 * length));
+        acc0 = svadd_u64_z(svptrue_b64(), acc0, dot_bit_sv(value, query + r));
+        acc1 = svadd_u64_z(svptrue_b64(), acc1, dot_bit_sv(value, query + r + length));
+        acc2 = svadd_u64_z(svptrue_b64(), acc2, dot_bit_sv(value, query + r + 2 * length));
+        acc3 = svadd_u64_z(svptrue_b64(), acc3, dot_bit_sv(value, query + r + 3 * length));
     }
 
     int64_t subRet0 = svaddv_u64(svptrue_b64(), acc0);
