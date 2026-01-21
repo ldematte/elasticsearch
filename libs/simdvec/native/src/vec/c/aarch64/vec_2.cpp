@@ -27,16 +27,13 @@
 #include "vec_common.h"
 #include "aarch64/aarch64_vec_common.h"
 
+static inline svuint64_t dot_bit_sv(const svuint64_t a, const int8_t* b) {
+    const svuint64_t q0 = svld1_u64(svptrue_b64(), (const uint64_t*)b);
+    return _mm512_popcnt_epi64(_mm512_and_si512(q0, a));
+    return svcnt_u64_x(svptrue_b64(), svand_u64_m(svptrue_b64(), q0, a)));
+}
+
 static inline int64_t dot_int1_int4_inner(const int8_t* a, const int8_t* query, const int32_t length) {
-    const uint64_t* a0 = (const uint64_t*)a;
-    const uint64_t* query_j0 = (const uint64_t*)query;
-    const uint64_t* query_j1 = (const uint64_t*)(query + length);
-    const uint64_t* query_j2 = (const uint64_t*)(query + 2 * length);
-    const uint64_t* query_j3 = (const uint64_t*)(query + 3 * length);
-
-    const int sizeof_sv = svcntd() * sizeof(int64_t);
-    const svbool_t all_vec = svptrue_b64();
-
     int r = 0;
 
     // Init accumulator(s) with 0
@@ -45,25 +42,21 @@ static inline int64_t dot_int1_int4_inner(const int8_t* a, const int8_t* query, 
     svuint64_t acc2 = svdup_n_u64(0);
     svuint64_t acc3 = svdup_n_u64(0);
 
+    const int sizeof_sv = svcntd() * sizeof(int64_t);
     int upperBound = length & ~(sizeof_sv - 1);
     for (; r < upperBound; r += sizeof_sv) {
-        svuint64_t value = svld1_u64(all_vec, a0 + r);
+        const svuint64_t value = svld1_u64(svptrue_b64(), (const uint64_t*)(a + r));
 
-        svuint64_t q0_vec = svld1_u64(all_vec, query_j0 + r);
-        svuint64_t q1_vec = svld1_u64(all_vec, query_j1 + r);
-        svuint64_t q2_vec = svld1_u64(all_vec, query_j2 + r);
-        svuint64_t q3_vec = svld1_u64(all_vec, query_j3 + r);
-
-        acc0 = svadd_u64_z(all_vec, acc0, svcnt_u64_x(all_vec, svand_u64_m(all_vec, value, q0_vec)));
-        acc1 = svadd_u64_z(all_vec, acc1, svcnt_u64_x(all_vec, svand_u64_m(all_vec, value, q1_vec)));
-        acc2 = svadd_u64_z(all_vec, acc2, svcnt_u64_x(all_vec, svand_u64_m(all_vec, value, q2_vec)));
-        acc3 = svadd_u64_z(all_vec, acc3, svcnt_u64_x(all_vec, svand_u64_m(all_vec, value, q3_vec)));
+        acc0 = svadd_u64_z(svptrue_b64(), acc0, dot_bit_512(value, query + r));
+        acc1 = svadd_u64_z(svptrue_b64(), acc1, dot_bit_512(value, query + r + length));
+        acc2 = svadd_u64_z(svptrue_b64(), acc2, dot_bit_512(value, query + r + 2 * length));
+        acc3 = svadd_u64_z(svptrue_b64(), acc3, dot_bit_512(value, query + r + 3 * length));
     }
 
-    int64_t subRet0 = svaddv_u64(all_vec, acc0);
-    int64_t subRet1 = svaddv_u64(all_vec, acc1);
-    int64_t subRet2 = svaddv_u64(all_vec, acc2);
-    int64_t subRet3 = svaddv_u64(all_vec, acc3);
+    int64_t subRet0 = svaddv_u64(svptrue_b64(), acc0);
+    int64_t subRet1 = svaddv_u64(svptrue_b64(), acc1);
+    int64_t subRet2 = svaddv_u64(svptrue_b64(), acc2);
+    int64_t subRet3 = svaddv_u64(svptrue_b64(), acc3);
 
     for (; r < length; r++) {
         int8_t value = *(a + r);
