@@ -461,7 +461,7 @@ EXPORT void vec_dot_int1_int4_bulk_score_2(
     f32_t centroidDp,
     f32_t* scores
 ) {
-    dot_int1_int4_inner_bulk<identity_mapper>(a, query, length, length, NULL, count, results);
+    dot_int1_int4_inner_bulk<identity_mapper>(a, query, length, length, NULL, count, scores);
     score_euclidean_bulk_2(
         corrections,
         count,
