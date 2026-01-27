@@ -30,6 +30,8 @@ public class Similarities {
     static final MethodHandle DOT_PRODUCT_I1I4_BULK = DISTANCE_FUNCS.dotProductHandleI1I4Bulk();
     static final MethodHandle DOT_PRODUCT_I1I4_BULK_WITH_OFFSETS = DISTANCE_FUNCS.dotProductHandleI1I4BulkWithOffsets();
 
+    static final MethodHandle DOT_PRODUCT_I1I4_BULK_SCORE = DISTANCE_FUNCS.dotProductHandleI1I4BulkWithScore();
+
     static final MethodHandle SCORE_EUCLIDEAN_BULK = DISTANCE_FUNCS.scoreEuclideanBulk();
     static final MethodHandle SCORE_MAX_INNER_PRODUCT_BULK = DISTANCE_FUNCS.scoreMaxInnerProductBulk();
     static final MethodHandle SCORE_OTHERS_BULK = DISTANCE_FUNCS.scoreOthersBulk();
@@ -112,6 +114,42 @@ public class Similarities {
             DOT_PRODUCT_I1I4_BULK_WITH_OFFSETS.invokeExact(a, query, length, pitch, offsets, count, scores);
         } catch (Throwable e) {
             throw rethrow(e);
+        }
+    }
+
+    public static float dotProductI1I4BulkWithScore(
+        MemorySegment a,
+        MemorySegment b,
+        int length,
+        int count,
+        MemorySegment corrections,
+        int dimensions,
+        float queryLowerInterval,
+        float queryUpperInterval,
+        int queryComponentSum,
+        float queryAdditionalCorrection,
+        float queryBitScale,
+        float centroidDp,
+        MemorySegment scores
+    ) {
+        try {
+            return (float) DOT_PRODUCT_I1I4_BULK_SCORE.invokeExact(
+                a,
+                b,
+                length,
+                count,
+                corrections,
+                dimensions,
+                queryLowerInterval,
+                queryUpperInterval,
+                queryComponentSum,
+                queryAdditionalCorrection,
+                queryBitScale,
+                centroidDp,
+                scores
+            );
+        } catch (Throwable t) {
+            throw new AssertionError(t);
         }
     }
 

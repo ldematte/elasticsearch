@@ -234,6 +234,44 @@ final class MSBitToInt4ESNextOSQVectorsScorer extends MemorySegmentESNextOSQVect
         return false;
     }
 
+    private float nativeQuantizeScoreBulkWithScore(
+        byte[] q,
+        int count,
+        float queryLowerInterval,
+        float queryUpperInterval,
+        int queryComponentSum,
+        float queryAdditionalCorrection,
+        VectorSimilarityFunction similarityFunction,
+        float centroidDp,
+        float[] scores
+    ) throws IOException {
+        long initialOffset = in.getFilePointer();
+        var datasetLengthInBytes = (long) length * count;
+        MemorySegment datasetSegment = memorySegment.asSlice(initialOffset, datasetLengthInBytes);
+
+        var queryMemorySegment = MemorySegment.ofArray(q);
+        var scoresSegment = MemorySegment.ofArray(scores);
+        var correctionsSegment = memorySegment.asSlice(datasetLengthInBytes);
+
+        final float maxScore = Similarities.dotProductI1I4BulkWithScore(
+            datasetSegment,
+            queryMemorySegment,
+            length,
+            count,
+            correctionsSegment,
+            dimensions,
+            queryLowerInterval,
+            queryUpperInterval,
+            queryComponentSum,
+            queryAdditionalCorrection,
+            FOUR_BIT_SCALE,
+            centroidDp,
+            scoresSegment
+        );
+        in.skipBytes(datasetLengthInBytes + 14L * bulkSize);
+        return maxScore;
+    }
+
     private void nativeQuantizeScoreBulk(byte[] q, int count, float[] scores) throws IOException {
         long initialOffset = in.getFilePointer();
         var datasetLengthInBytes = (long) length * count;
@@ -407,25 +445,34 @@ final class MSBitToInt4ESNextOSQVectorsScorer extends MemorySegmentESNextOSQVect
         if (length >= 16) {
             if (PanamaESVectorUtilSupport.HAS_FAST_INTEGER_VECTORS) {
                 // Compute quantized distance
-                if (NATIVE_SUPPORTED && SUPPORTS_HEAP_SEGMENTS) {
-                    nativeQuantizeScoreBulk(q, bulkSize, scores);
-                } else if (PanamaESVectorUtilSupport.VECTOR_BITSIZE >= 256) {
-                    quantizeScore256Bulk(q, bulkSize, scores);
-                } else if (PanamaESVectorUtilSupport.VECTOR_BITSIZE == 128) {
-                    quantizeScore128Bulk(q, bulkSize, scores);
-                }
-                // Compute score from distance
                 if (NATIVE_SUPPORTED && SUPPORTS_HEAP_SEGMENTS && IS_X64) {
-                    return nativeScoreBulk(
+                    // nativeQuantizeScoreBulk(q, bulkSize, scores);
+                    return nativeQuantizeScoreBulkWithScore(q, bulkSize,
                         queryLowerInterval,
                         queryUpperInterval,
                         queryComponentSum,
                         queryAdditionalCorrection,
                         similarityFunction,
                         centroidDp,
-                        scores
-                    );
+                        scores);
                 } else if (PanamaESVectorUtilSupport.VECTOR_BITSIZE >= 256) {
+                    quantizeScore256Bulk(q, bulkSize, scores);
+                } else if (PanamaESVectorUtilSupport.VECTOR_BITSIZE == 128) {
+                    quantizeScore128Bulk(q, bulkSize, scores);
+                }
+                // Compute score from distance
+//                if (NATIVE_SUPPORTED && SUPPORTS_HEAP_SEGMENTS) {
+//                    return nativeScoreBulk(
+//                        queryLowerInterval,
+//                        queryUpperInterval,
+//                        queryComponentSum,
+//                        queryAdditionalCorrection,
+//                        similarityFunction,
+//                        centroidDp,
+//                        scores
+//                    );
+//                } else
+                    if (PanamaESVectorUtilSupport.VECTOR_BITSIZE >= 256) {
                     return score256Bulk(
                         queryLowerInterval,
                         queryUpperInterval,

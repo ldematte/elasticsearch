@@ -98,6 +98,9 @@ public interface VectorSimilarityFunctions {
      */
     MethodHandle dotProductHandleI1I4Bulk();
 
+
+    MethodHandle dotProductHandleI1I4BulkWithScore();
+
     /**
      * Produces a method handle which computes the dot product of several vectors.
      * This bulk operation can be used to compute the dot product between a single int4 query

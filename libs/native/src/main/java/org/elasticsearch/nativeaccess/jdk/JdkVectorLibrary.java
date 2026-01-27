@@ -59,6 +59,8 @@ public final class JdkVectorLibrary implements VectorLibrary {
     static final MethodHandle scoreMaxInnerProductBulk$mh;
     static final MethodHandle scoreOthersBulk$mh;
 
+    static final MethodHandle doti1i4BulkWithScore$mh;
+
     public static final JdkVectorSimilarityFunctions INSTANCE;
 
     /**
@@ -148,9 +150,28 @@ public final class JdkVectorLibrary implements VectorLibrary {
                     ADDRESS // scores
                 );
 
+                FunctionDescriptor bulkDistanceScore = FunctionDescriptor.of(
+                    JAVA_FLOAT,
+                    ADDRESS,
+                    ADDRESS,
+                    JAVA_INT,
+                    JAVA_INT,
+                    ADDRESS, // corrections
+                    JAVA_INT, // dimensions,
+                    JAVA_FLOAT, // queryLowerInterval,
+                    JAVA_FLOAT, // queryUpperInterval,
+                    JAVA_INT, // queryComponentSum,
+                    JAVA_FLOAT, // queryAdditionalCorrection,
+                    JAVA_FLOAT, // queryBitScale,
+                    JAVA_FLOAT, // centroidDp,
+                    ADDRESS // scores
+                );
+
                 scoreEuclideanBulk$mh = bindFunction("score_euclidean_bulk", caps, score);
                 scoreMaxInnerProductBulk$mh = bindFunction("score_maximum_inner_product_bulk", caps, score);
                 scoreOthersBulk$mh = bindFunction("score_others_bulk", caps, score);
+
+                doti1i4BulkWithScore$mh = bindFunction("vec_dot_int1_int4_bulk_score_2", caps, bulkDistanceScore);
 
                 INSTANCE = new JdkVectorSimilarityFunctions();
             } else {
@@ -177,6 +198,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
                 scoreEuclideanBulk$mh = null;
                 scoreMaxInnerProductBulk$mh = null;
                 scoreOthersBulk$mh = null;
+                doti1i4BulkWithScore$mh = null;
                 INSTANCE = null;
             }
         } catch (Throwable t) {
@@ -571,6 +593,42 @@ public final class JdkVectorLibrary implements VectorLibrary {
             }
         }
 
+        private static float dotProductI1I4BulkWithScore(
+            MemorySegment a,
+            MemorySegment b,
+            int length,
+            int count,
+            MemorySegment corrections,
+            int dimensions,
+            float queryLowerInterval,
+            float queryUpperInterval,
+            int queryComponentSum,
+            float queryAdditionalCorrection,
+            float queryBitScale,
+            float centroidDp,
+            MemorySegment scores
+        ) {
+            try {
+                return (float) doti1i4BulkWithScore$mh.invokeExact(
+                    a,
+                    b,
+                    length,
+                    count,
+                    corrections,
+                    dimensions,
+                    queryLowerInterval,
+                    queryUpperInterval,
+                    queryComponentSum,
+                    queryAdditionalCorrection,
+                    queryBitScale,
+                    centroidDp,
+                    scores
+                );
+            } catch (Throwable t) {
+                throw new AssertionError(t);
+            }
+        }
+
         private static float scoreEuclideanBulk(
             MemorySegment corrections,
             int bulkSize,
@@ -668,6 +726,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
         static final MethodHandle DOT_HANDLE_I1I4;
         static final MethodHandle DOT_HANDLE_I1I4_BULK;
         static final MethodHandle DOT_HANDLE_I1I4_BULK_WITH_OFFSETS;
+        static final MethodHandle DOT_HANDLE_I1I4_BULK_SCORE;
 
         static final MethodHandle SQR_HANDLE_7U;
         static final MethodHandle SQR_HANDLE_7U_BULK;
@@ -749,6 +808,17 @@ public final class JdkVectorLibrary implements VectorLibrary {
                     bulkOffsetScorer
                 );
 
+                DOT_HANDLE_I1I4_BULK_SCORE = lookup.findStatic(
+                    JdkVectorSimilarityFunctions.class,
+                    "dotProductI1I4BulkWithScore",
+                    MethodType.methodType(
+                        float.class,
+                        MemorySegment.class,
+                        MemorySegment.class, int.class, int.class, MemorySegment.class, int.class, float.class,
+                        float.class, int.class, float.class, float.class, float.class, MemorySegment.class)
+                );
+
+
                 DOT_HANDLE_FLOAT32 = lookup.findStatic(JdkVectorSimilarityFunctions.class, "dotProductF32", singleFloatScorer);
                 DOT_HANDLE_FLOAT32_BULK = lookup.findStatic(JdkVectorSimilarityFunctions.class, "dotProductF32Bulk", bulkScorer);
                 DOT_HANDLE_FLOAT32_BULK_WITH_OFFSETS = lookup.findStatic(
@@ -801,6 +871,11 @@ public final class JdkVectorLibrary implements VectorLibrary {
         @Override
         public MethodHandle dotProductHandleI1I4Bulk() {
             return DOT_HANDLE_I1I4_BULK;
+        }
+
+        @Override
+        public MethodHandle dotProductHandleI1I4BulkWithScore() {
+            return DOT_HANDLE_I1I4_BULK_SCORE;
         }
 
         @Override

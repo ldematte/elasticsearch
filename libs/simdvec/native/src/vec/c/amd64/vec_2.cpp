@@ -43,6 +43,19 @@
 #define STRIDE_BYTES_LEN sizeof(__m512i) // Must be a power of 2
 #endif
 
+f32_t score_euclidean_bulk_2(
+        const int8_t* corrections,
+		int32_t bulkSize,
+        int32_t dimensions,
+        f32_t queryLowerInterval,
+        f32_t queryUpperInterval,
+        int32_t queryComponentSum,
+        f32_t queryAdditionalCorrection,
+        f32_t queryBitScale,
+        f32_t centroidDp,
+        f32_t* scores
+);
+
 // Returns acc + ( p1 * p2 ), for 64-wide int lanes.
 template<int offsetRegs>
 inline __m512i fma8(__m512i acc, const int8_t* p1, const int8_t* p2) {
@@ -430,6 +443,37 @@ EXPORT void vec_dot_int1_int4_bulk_2(
     const int32_t count,
     f32_t* results) {
     dot_int1_int4_inner_bulk<identity_mapper>(a, query, length, length, NULL, count, results);
+}
+
+EXPORT void vec_dot_int1_int4_bulk_score_2(
+    const int8_t* a,
+    const int8_t* query,
+    const int32_t length, //
+    const int32_t count, // int32_t bulkSize,
+
+    const int8_t* corrections,
+    int32_t dimensions,
+    f32_t queryLowerInterval,
+    f32_t queryUpperInterval,
+    int32_t queryComponentSum,
+    f32_t queryAdditionalCorrection,
+    f32_t queryBitScale,
+    f32_t centroidDp,
+    f32_t* scores
+) {
+    dot_int1_int4_inner_bulk<identity_mapper>(a, query, length, length, NULL, count, results);
+    score_euclidean_bulk_2(
+        corrections,
+        count,
+        dimensions,
+        queryLowerInterval,
+        queryUpperInterval,
+        queryComponentSum,
+        queryAdditionalCorrection,
+        queryBitScale,
+        centroidDp,
+        scores
+    );
 }
 
 EXPORT void vec_dot_int1_int4_bulk_offsets_2(
