@@ -25,7 +25,6 @@ import java.lang.foreign.MemorySegment;
 /** Panamized scorer for quantized vectors stored as a {@link MemorySegment}. */
 public final class MemorySegmentESNextOSQVectorsScorer extends ESNextOSQVectorsScorer {
 
-    private final MemorySegment memorySegment;
     private final MemorySegmentScorer scorer;
 
     public MemorySegmentESNextOSQVectorsScorer(
@@ -34,17 +33,15 @@ public final class MemorySegmentESNextOSQVectorsScorer extends ESNextOSQVectorsS
         byte indexBits,
         int dimensions,
         int dataLength,
-        int bulkSize,
-        MemorySegment memorySegment
+        int bulkSize
     ) {
         super(in, queryBits, indexBits, dimensions, dataLength);
-        this.memorySegment = memorySegment;
         if (queryBits == 4 && indexBits == 1) {
-            this.scorer = new MSBitToInt4ESNextOSQVectorsScorer(in, dimensions, dataLength, bulkSize, memorySegment);
-        } else if (queryBits == 4 && indexBits == 4) {
-            this.scorer = new MSInt4SymmetricESNextOSQVectorsScorer(in, dimensions, dataLength, bulkSize, memorySegment);
-        } else if (queryBits == 4 && indexBits == 2) {
-            this.scorer = new MSDibitToInt4ESNextOSQVectorsScorer(in, dimensions, dataLength, bulkSize, memorySegment);
+            this.scorer = new MSBitToInt4ESNextOSQVectorsScorer(in, dimensions, dataLength, bulkSize);
+//        } else if (queryBits == 4 && indexBits == 4) {
+//            this.scorer = new MSInt4SymmetricESNextOSQVectorsScorer(in, dimensions, dataLength, bulkSize, memorySegment);
+//        } else if (queryBits == 4 && indexBits == 2) {
+//            this.scorer = new MSDibitToInt4ESNextOSQVectorsScorer(in, dimensions, dataLength, bulkSize, memorySegment);
         } else {
             throw new IllegalArgumentException("Only asymmetric 4-bit query and 1-bit index supported");
         }
