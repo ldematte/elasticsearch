@@ -17,7 +17,7 @@ import org.elasticsearch.simdvec.ESVectorUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-class DefaultES93BinaryQuantizedVectorScorer extends ES93BinaryQuantizedVectorScorer {
+public class DefaultES93BinaryQuantizedVectorScorer extends ES93BinaryQuantizedVectorScorer {
 
     protected final IndexInput slice;
     private int lastOrd = -1;
@@ -27,7 +27,7 @@ class DefaultES93BinaryQuantizedVectorScorer extends ES93BinaryQuantizedVectorSc
     ByteBuffer byteBuffer;
     int quantizedComponentSum;
 
-    DefaultES93BinaryQuantizedVectorScorer(IndexInput slice, int dimension, int numBytes) {
+    public DefaultES93BinaryQuantizedVectorScorer(IndexInput slice, int dimension, int numBytes) {
         super(dimension, numBytes);
         this.slice = slice;
     }

@@ -19,6 +19,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
+import org.apache.lucene.util.VectorUtil;
 import org.apache.lucene.util.hnsw.RandomVectorScorer;
 import org.apache.lucene.util.hnsw.RandomVectorScorerSupplier;
 import org.apache.lucene.util.quantization.QuantizedByteVectorValues;
@@ -39,6 +40,16 @@ class BenchmarkUtils {
         var random = ThreadLocalRandom.current();
         for (int i = 0, len = bytes.length; i < len;) {
             bytes[i++] = (byte) random.nextInt(MIN_INT7_VALUE, MAX_INT7_VALUE + 1);
+        }
+    }
+
+    static void randomFloatVector(float[] vector, VectorSimilarityFunction vectorSimilarityFunction) {
+        var random = ThreadLocalRandom.current();
+        for (int i = 0; i < vector.length; i++) {
+            vector[i] = random.nextFloat();
+        }
+        if (vectorSimilarityFunction != VectorSimilarityFunction.EUCLIDEAN) {
+            VectorUtil.l2normalize(vector);
         }
     }
 

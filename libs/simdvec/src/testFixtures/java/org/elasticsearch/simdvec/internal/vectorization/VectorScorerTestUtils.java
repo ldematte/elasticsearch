@@ -58,7 +58,7 @@ public class VectorScorerTestUtils {
         return new VectorData(toIndex, r.lowerInterval(), r.upperInterval(), r.additionalCorrection(), (short) r.quantizedComponentSum());
     }
 
-    static VectorData createBinarizedQueryData(
+    public static VectorData createBinarizedQueryData(
         float[] floatVectorValues,
         float[] centroid,
         OptimizedScalarQuantizer binaryQuantizer,
@@ -86,7 +86,7 @@ public class VectorScorerTestUtils {
         return new VectorData(toQuery, r.lowerInterval(), r.upperInterval(), r.additionalCorrection(), (short) r.quantizedComponentSum());
     }
 
-    static void writeBinarizedVectorData(IndexOutput binarizedQueryData, VectorData vectorData) throws IOException {
+    public static void writeBinarizedVectorData(IndexOutput binarizedQueryData, VectorData vectorData) throws IOException {
         binarizedQueryData.writeBytes(vectorData.vector, vectorData.vector.length);
         binarizedQueryData.writeInt(Float.floatToIntBits(vectorData.lowerInterval()));
         binarizedQueryData.writeInt(Float.floatToIntBits(vectorData.upperInterval()));
