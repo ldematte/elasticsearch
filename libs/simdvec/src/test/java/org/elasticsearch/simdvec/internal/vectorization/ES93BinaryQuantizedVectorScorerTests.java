@@ -30,7 +30,7 @@ import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestU
 import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestUtils.createBinarizedQueryData;
 import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestUtils.writeBinarizedVectorData;
 
-public class ES93BinaryQuantizedVectorsScorerTests extends BaseVectorizationTests {
+public class ES93BinaryQuantizedVectorScorerTests extends BaseVectorizationTests {
 
     public enum DirectoryType {
         NIOFS,
@@ -41,7 +41,7 @@ public class ES93BinaryQuantizedVectorsScorerTests extends BaseVectorizationTest
 
     private final VectorSimilarityFunction similarityFunction;
 
-    public ES93BinaryQuantizedVectorsScorerTests(DirectoryType directoryType, VectorSimilarityFunction similarityFunction) {
+    public ES93BinaryQuantizedVectorScorerTests(DirectoryType directoryType, VectorSimilarityFunction similarityFunction) {
         this.directoryType = directoryType;
         this.similarityFunction = similarityFunction;
     }
@@ -92,8 +92,8 @@ public class ES93BinaryQuantizedVectorsScorerTests extends BaseVectorizationTest
                 final int perVectorBytes = vectorLengthInBytes + 14;
                 assertEquals(in.length(), (long) numVectors * perVectorBytes);
 
-                final var defaultScorer = defaultProvider().newES93BinaryQuantizedVectorsScorer(in, dims, vectorLengthInBytes);
-                final var panamaScorer = maybePanamaProvider().newES93BinaryQuantizedVectorsScorer(in, dims, vectorLengthInBytes);
+                final var defaultScorer = defaultProvider().newES93BinaryQuantizedVectorScorer(in, dims, vectorLengthInBytes);
+                final var panamaScorer = maybePanamaProvider().newES93BinaryQuantizedVectorScorer(in, dims, vectorLengthInBytes);
 
                 for (int i = 0; i < numVectors; i++) {
                     var defaultScore = defaultScorer.score(
@@ -145,8 +145,8 @@ public class ES93BinaryQuantizedVectorsScorerTests extends BaseVectorizationTest
                 final int perVectorBytes = vectorLengthInBytes + 14;
                 assertEquals(in.length(), (long) numVectors * perVectorBytes);
 
-                final var defaultScorer = defaultProvider().newES93BinaryQuantizedVectorsScorer(in, dims, vectorLengthInBytes);
-                final var panamaScorer = maybePanamaProvider().newES93BinaryQuantizedVectorsScorer(in, dims, vectorLengthInBytes);
+                final var defaultScorer = defaultProvider().newES93BinaryQuantizedVectorScorer(in, dims, vectorLengthInBytes);
+                final var panamaScorer = maybePanamaProvider().newES93BinaryQuantizedVectorScorer(in, dims, vectorLengthInBytes);
 
                 final float[] scoresDefault = new float[numVectors];
                 final float[] scoresPanama = new float[numVectors];

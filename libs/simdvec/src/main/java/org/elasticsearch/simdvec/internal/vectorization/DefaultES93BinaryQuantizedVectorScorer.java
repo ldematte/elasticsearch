@@ -11,13 +11,13 @@ package org.elasticsearch.simdvec.internal.vectorization;
 
 import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.store.IndexInput;
-import org.elasticsearch.simdvec.ES93BinaryQuantizedVectorsScorer;
+import org.elasticsearch.simdvec.ES93BinaryQuantizedVectorScorer;
 import org.elasticsearch.simdvec.ESVectorUtil;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-class DefaultES93BinaryQuantizedVectorsScorer extends ES93BinaryQuantizedVectorsScorer {
+class DefaultES93BinaryQuantizedVectorScorer extends ES93BinaryQuantizedVectorScorer {
 
     protected final IndexInput slice;
     private int lastOrd = -1;
@@ -27,7 +27,7 @@ class DefaultES93BinaryQuantizedVectorsScorer extends ES93BinaryQuantizedVectors
     ByteBuffer byteBuffer;
     int quantizedComponentSum;
 
-    DefaultES93BinaryQuantizedVectorsScorer(IndexInput slice, int dimension, int numBytes) {
+    DefaultES93BinaryQuantizedVectorScorer(IndexInput slice, int dimension, int numBytes) {
         super(dimension, numBytes);
         this.slice = slice;
     }
@@ -45,7 +45,7 @@ class DefaultES93BinaryQuantizedVectorsScorer extends ES93BinaryQuantizedVectors
     ) throws IOException {
         var d = values(targetOrd);
         float qcDist = ESVectorUtil.ipByteBinByte(q, d);
-        return quantizedScore(
+        return applyCorrections(
             dimensions,
             similarityFunction,
             centroidDp,

@@ -18,7 +18,7 @@ import java.io.IOException;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 
-public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantizedVectorsScorer {
+public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantizedVectorScorer {
 
     private final MemorySegmentAccessInput msai;
 
@@ -60,7 +60,7 @@ public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantize
         var indexQuantizedComponentSum = Short.toUnsignedInt(segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, numBytes + 3 * Float.BYTES));
 
         var qcDist = Similarities.dotProductI1I4(segment, MemorySegment.ofArray(q), numBytes);
-        return quantizedScore(
+        return applyCorrections(
             dimensions,
             similarityFunction,
             centroidDp,
@@ -128,7 +128,7 @@ public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantize
                 segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, offset + numBytes + 3 * Float.BYTES)
             );
 
-            scores[i] = quantizedScore(
+            scores[i] = applyCorrections(
                 dimensions,
                 similarityFunction,
                 centroidDp,

@@ -29,7 +29,7 @@ import org.apache.lucene.util.hnsw.UpdateableRandomVectorScorer;
 import org.elasticsearch.index.codec.vectors.BQVectorUtils;
 import org.elasticsearch.index.codec.vectors.OptimizedScalarQuantizer;
 import org.elasticsearch.index.codec.vectors.es816.BinaryQuantizer;
-import org.elasticsearch.simdvec.ES93BinaryQuantizedVectorsScorer;
+import org.elasticsearch.simdvec.ES93BinaryQuantizedVectorScorer;
 import org.elasticsearch.simdvec.ESVectorUtil;
 
 import java.io.IOException;
@@ -160,7 +160,7 @@ public class ES818BinaryFlatVectorsScorer implements FlatVectorsScorer {
         private OptimizedScalarQuantizer.QuantizationResult queryCorrections = null;
         private int currentOrdinal = -1;
 
-        private final ES93BinaryQuantizedVectorsScorer scorer;
+        private final ES93BinaryQuantizedVectorScorer scorer;
 
         BinarizedRandomVectorScorer(
             ES818BinaryQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors,
@@ -172,7 +172,7 @@ public class ES818BinaryFlatVectorsScorer implements FlatVectorsScorer {
             this.quantizedQuery = new byte[queryVectors.quantizedDimension()];
             this.targetVectors = targetVectors;
             this.similarityFunction = similarityFunction;
-            this.scorer = ESVectorUtil.getES93BinaryQuantizedVectorsScorer(
+            this.scorer = ESVectorUtil.getES93BinaryQuantizedVectorScorer(
                 targetVectors.slice,
                 targetVectors.dimension(),
                 targetVectors.getVectorByteLength()

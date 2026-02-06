@@ -17,14 +17,14 @@ import java.io.IOException;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 import static org.apache.lucene.index.VectorSimilarityFunction.MAXIMUM_INNER_PRODUCT;
 
-public abstract class ES93BinaryQuantizedVectorsScorer {
+public abstract class ES93BinaryQuantizedVectorScorer {
 
     protected static final float FOUR_BIT_SCALE = 1f / ((1 << 4) - 1);
     protected final int dimensions;
     protected final int numBytes;
     protected final int byteSize;
 
-    public ES93BinaryQuantizedVectorsScorer(int dimensions, int numBytes) {
+    public ES93BinaryQuantizedVectorScorer(int dimensions, int numBytes) {
         this.dimensions = dimensions;
         this.numBytes = numBytes;
         this.byteSize = numBytes + (Float.BYTES * 3) + Short.BYTES;
@@ -70,7 +70,7 @@ public abstract class ES93BinaryQuantizedVectorsScorer {
         return maxScore;
     }
 
-    protected static float quantizedScore(
+    protected static float applyCorrections(
         int dims,
         VectorSimilarityFunction similarityFunction,
         float centroidDp,

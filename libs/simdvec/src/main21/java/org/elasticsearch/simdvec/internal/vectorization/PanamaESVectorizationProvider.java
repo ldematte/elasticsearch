@@ -14,7 +14,7 @@ import org.apache.lucene.store.MemorySegmentAccessInput;
 import org.elasticsearch.nativeaccess.NativeAccess;
 import org.elasticsearch.simdvec.ES91OSQVectorsScorer;
 import org.elasticsearch.simdvec.ES92Int7VectorsScorer;
-import org.elasticsearch.simdvec.ES93BinaryQuantizedVectorsScorer;
+import org.elasticsearch.simdvec.ES93BinaryQuantizedVectorScorer;
 import org.elasticsearch.simdvec.ESNextOSQVectorsScorer;
 import org.elasticsearch.simdvec.internal.MemorySegmentES92Int7VectorsScorer;
 
@@ -81,11 +81,11 @@ final class PanamaESVectorizationProvider extends ESVectorizationProvider {
     }
 
     @Override
-    public ES93BinaryQuantizedVectorsScorer newES93BinaryQuantizedVectorsScorer(IndexInput input, int dimensions, int vectorLengthInBytes)
+    public ES93BinaryQuantizedVectorScorer newES93BinaryQuantizedVectorScorer(IndexInput input, int dimensions, int vectorLengthInBytes)
         throws IOException {
         if (input instanceof MemorySegmentAccessInput msai && NATIVE_SUPPORTED && SUPPORTS_HEAP_SEGMENTS) {
             return new NativeBinaryQuantizedVectorScorer(input, dimensions, vectorLengthInBytes, msai);
         }
-        return new DefaultES93BinaryQuantizedVectorsScorer(input, dimensions, vectorLengthInBytes);
+        return new DefaultES93BinaryQuantizedVectorScorer(input, dimensions, vectorLengthInBytes);
     }
 }
