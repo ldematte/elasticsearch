@@ -16,7 +16,6 @@ import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.MMapDirectory;
 import org.apache.lucene.store.NIOFSDirectory;
 import org.apache.lucene.util.VectorUtil;
-import org.apache.lucene.util.quantization.OptimizedScalarQuantizer;
 import org.elasticsearch.common.logging.LogConfigurator;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.index.codec.vectors.BQVectorUtils;
@@ -91,9 +90,7 @@ public class VectorScorerBQBenchmark {
 
     int indexVectorLengthInBytes;
 
-
     VectorScorerTestUtils.VectorData[] queries;
-    OptimizedScalarQuantizer.QuantizationResult result;
     float centroidDp;
 
     ES93BinaryQuantizedVectorScorer scorer;
@@ -111,17 +108,17 @@ public class VectorScorerBQBenchmark {
     }
 
     private void createTestFile(
+        Random random,
         Directory dir,
-        String fileName,
         int numVectors,
         float[] vectorValues,
         float[] centroid,
         org.elasticsearch.index.codec.vectors.OptimizedScalarQuantizer quantizer,
         int dims
     ) throws IOException {
-        try (IndexOutput out = dir.createOutput(fileName, IOContext.DEFAULT)) {
+        try (IndexOutput out = dir.createOutput("vectors", IOContext.DEFAULT)) {
             for (int i = 0; i < numVectors; i++) {
-                randomFloatVector(vectorValues, similarityFunction);
+                randomFloatVector(random, vectorValues, similarityFunction);
                 var indexData = createBinarizedIndexData(vectorValues, centroid, quantizer, dims);
                 writeBinarizedVectorData(out, indexData);
             }
@@ -137,16 +134,16 @@ public class VectorScorerBQBenchmark {
         };
 
         final float[] centroid = new float[dims];
-        randomFloatVector(centroid, similarityFunction);
+        randomFloatVector(random, centroid, similarityFunction);
         centroidDp = VectorUtil.dotProduct(centroid, centroid);
 
         float[] vectorValues = new float[dims];
         var quantizer = new org.elasticsearch.index.codec.vectors.OptimizedScalarQuantizer(similarityFunction);
 
-        createTestFile(directory, "vectors", numVectors, vectorValues, centroid, quantizer, dims);
-        queries = new  VectorScorerTestUtils.VectorData[numQueries];
+        createTestFile(random, directory, numVectors, vectorValues, centroid, quantizer, dims);
+        queries = new VectorScorerTestUtils.VectorData[numQueries];
         for (int i = 0; i < numQueries; i++) {
-            randomFloatVector(vectorValues, similarityFunction);
+            randomFloatVector(random, vectorValues, similarityFunction);
             queries[i] = createBinarizedQueryData(vectorValues, centroid, quantizer, dims);
         }
 

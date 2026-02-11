@@ -19,7 +19,6 @@ import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.MMapDirectory;
 import org.apache.lucene.store.NIOFSDirectory;
 import org.apache.lucene.util.VectorUtil;
-import org.elasticsearch.index.codec.vectors.BQVectorUtils;
 import org.elasticsearch.index.codec.vectors.OptimizedScalarQuantizer;
 import org.elasticsearch.index.codec.vectors.diskbbq.next.ESNextDiskBBQVectorsFormat;
 import org.elasticsearch.simdvec.ESNextOSQVectorsScorer;
@@ -51,7 +50,6 @@ public class ESNextOSQVectorsScorerTests extends BaseVectorizationTests {
     public void testQuantizeScore() throws Exception {
 
         final int dimensions = random().nextInt(1, 2000);
-        final int length2 = BQVectorUtils.discretize(dimensions, 64) / 8;
 
         final int length = switch (indexBits) {
             case 1 -> ESNextDiskBBQVectorsFormat.QuantEncoding.ONE_BIT_4BIT_QUERY.getDocPackedLength(dimensions);

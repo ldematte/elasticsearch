@@ -98,7 +98,7 @@ public abstract class ES93BinaryQuantizedVectorScorer {
             score = queryAdditionalCorrection + indexAdditionalCorrection - 2 * score;
             return Math.max(VectorUtil.normalizeDistanceToUnitInterval(score), 0);
         } else {
-            // For cosine and max inner product, we need to apply the additional correction, which is
+            // For dot product/cosine and max inner product, we need to apply the additional correction, which is
             // assumed to be the non-centered dot-product between the vector and the centroid
             score += queryAdditionalCorrection + indexAdditionalCorrection - centroidDp;
             if (similarityFunction == MAXIMUM_INNER_PRODUCT) {

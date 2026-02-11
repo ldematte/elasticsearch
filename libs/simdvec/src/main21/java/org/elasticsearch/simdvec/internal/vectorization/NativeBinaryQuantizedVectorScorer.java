@@ -42,6 +42,7 @@ public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantize
         var segment = msai.segmentSliceOrNull(offset, byteSize);
         if (segment == null) {
             // Fallback to the IndexInput-based (on-heap) implementation
+            // TODO: use copyOnHeap and BufferedIndexInputWrapper from #141718 instead
             return super.score(
                 q,
                 queryLowerInterval,

@@ -29,6 +29,7 @@ import org.elasticsearch.simdvec.VectorScorerFactory;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
 class BenchmarkUtils {
@@ -43,8 +44,7 @@ class BenchmarkUtils {
         }
     }
 
-    static void randomFloatVector(float[] vector, VectorSimilarityFunction vectorSimilarityFunction) {
-        var random = ThreadLocalRandom.current();
+    static void randomFloatVector(Random random, float[] vector, VectorSimilarityFunction vectorSimilarityFunction) {
         for (int i = 0; i < vector.length; i++) {
             vector[i] = random.nextFloat();
         }
