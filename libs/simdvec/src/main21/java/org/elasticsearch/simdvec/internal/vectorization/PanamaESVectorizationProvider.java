@@ -26,7 +26,6 @@ final class PanamaESVectorizationProvider extends ESVectorizationProvider {
     private final ESVectorUtilSupport vectorUtilSupport;
 
     private static final boolean NATIVE_SUPPORTED = NativeAccess.instance().getVectorSimilarityFunctions().isPresent();
-    private static final boolean SUPPORTS_HEAP_SEGMENTS = Runtime.version().feature() >= 22;
 
     PanamaESVectorizationProvider() {
         vectorUtilSupport = new PanamaESVectorUtilSupport();
@@ -83,7 +82,7 @@ final class PanamaESVectorizationProvider extends ESVectorizationProvider {
     @Override
     public ES93BinaryQuantizedVectorScorer newES93BinaryQuantizedVectorScorer(IndexInput input, int dimensions, int vectorLengthInBytes)
         throws IOException {
-        if (input instanceof MemorySegmentAccessInput msai && NATIVE_SUPPORTED && SUPPORTS_HEAP_SEGMENTS) {
+        if (input instanceof MemorySegmentAccessInput msai && NATIVE_SUPPORTED) {
             return new NativeBinaryQuantizedVectorScorer(input, dimensions, vectorLengthInBytes, msai);
         }
         return new DefaultES93BinaryQuantizedVectorScorer(input, dimensions, vectorLengthInBytes);

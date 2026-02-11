@@ -15,10 +15,13 @@ import org.apache.lucene.store.MemorySegmentAccessInput;
 import org.elasticsearch.simdvec.internal.Similarities;
 
 import java.io.IOException;
+import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 
 public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantizedVectorScorer {
+
+    private static final boolean SUPPORTS_HEAP_SEGMENTS = Runtime.version().feature() >= 22;
 
     private final MemorySegmentAccessInput msai;
 
@@ -60,7 +63,16 @@ public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantize
         var indexAdditionalCorrection = segment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, numBytes + 2 * Float.BYTES);
         var indexQuantizedComponentSum = Short.toUnsignedInt(segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, numBytes + 3 * Float.BYTES));
 
-        var qcDist = Similarities.dotProductD1Q4(segment, MemorySegment.ofArray(q), numBytes);
+        final long qcDist;
+        if (SUPPORTS_HEAP_SEGMENTS) {
+            qcDist = Similarities.dotProductD1Q4(segment, MemorySegment.ofArray(q), numBytes);
+        } else {
+            try (var arena = Arena.ofConfined()) {
+                var querySegment = arena.allocate(numBytes);
+                MemorySegment.copy(q, 0, querySegment, ValueLayout.JAVA_BYTE, 0, numBytes);
+                qcDist = Similarities.dotProductD1Q4(segment, querySegment, numBytes);
+            }
+        }
         return applyCorrections(
             dimensions,
             similarityFunction,
@@ -107,15 +119,35 @@ public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantize
             );
         }
 
-        Similarities.dotProductD1Q4BulkWithOffsets(
-            segment,
-            MemorySegment.ofArray(q),
-            numBytes,
-            byteSize,
-            MemorySegment.ofArray(nodes),
-            bulkSize,
-            MemorySegment.ofArray(scores)
-        );
+        if (SUPPORTS_HEAP_SEGMENTS) {
+            Similarities.dotProductD1Q4BulkWithOffsets(
+                segment,
+                MemorySegment.ofArray(q),
+                numBytes,
+                byteSize,
+                MemorySegment.ofArray(nodes),
+                bulkSize,
+                MemorySegment.ofArray(scores)
+            );
+        } else {
+            try (var arena = Arena.ofConfined()) {
+                var querySegment = arena.allocate(numBytes, 64);
+                var offsetsSegment = arena.allocate((long) bulkSize * Integer.BYTES, 64);
+                var scoresSegment = arena.allocate((long) bulkSize * Float.BYTES, 64);
+                MemorySegment.copy(q, 0, querySegment, ValueLayout.JAVA_BYTE, 0, numBytes);
+                MemorySegment.copy(nodes, 0, offsetsSegment, ValueLayout.JAVA_INT, 0, bulkSize);
+                Similarities.dotProductD1Q4BulkWithOffsets(
+                    segment,
+                    querySegment,
+                    numBytes,
+                    byteSize,
+                    offsetsSegment,
+                    bulkSize,
+                    scoresSegment
+                );
+                MemorySegment.copy(scoresSegment, ValueLayout.JAVA_FLOAT, 0, scores, 0, bulkSize);
+            }
+        }
 
         // TODO: native/vectorize this code too
         float maxScore = Float.NEGATIVE_INFINITY;
