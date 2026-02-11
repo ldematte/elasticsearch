@@ -59,7 +59,7 @@ public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantize
         var indexAdditionalCorrection = segment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, numBytes + 2 * Float.BYTES);
         var indexQuantizedComponentSum = Short.toUnsignedInt(segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, numBytes + 3 * Float.BYTES));
 
-        var qcDist = Similarities.dotProductI1I4(segment, MemorySegment.ofArray(q), numBytes);
+        var qcDist = Similarities.dotProductD1Q4(segment, MemorySegment.ofArray(q), numBytes);
         return applyCorrections(
             dimensions,
             similarityFunction,
@@ -106,7 +106,7 @@ public class NativeBinaryQuantizedVectorScorer extends DefaultES93BinaryQuantize
             );
         }
 
-        Similarities.dotProductI1I4BulkWithOffsets(
+        Similarities.dotProductD1Q4BulkWithOffsets(
             segment,
             MemorySegment.ofArray(q),
             numBytes,
