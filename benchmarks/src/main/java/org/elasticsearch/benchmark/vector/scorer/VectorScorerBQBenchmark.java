@@ -91,7 +91,6 @@ public class VectorScorerBQBenchmark {
 
     int indexVectorLengthInBytes;
 
-
     VectorScorerTestUtils.VectorData[] queries;
     OptimizedScalarQuantizer.QuantizationResult result;
     float centroidDp;
@@ -144,7 +143,7 @@ public class VectorScorerBQBenchmark {
         var quantizer = new org.elasticsearch.index.codec.vectors.OptimizedScalarQuantizer(similarityFunction);
 
         createTestFile(directory, "vectors", numVectors, vectorValues, centroid, quantizer, dims);
-        queries = new  VectorScorerTestUtils.VectorData[numQueries];
+        queries = new VectorScorerTestUtils.VectorData[numQueries];
         for (int i = 0; i < numQueries; i++) {
             randomFloatVector(vectorValues, similarityFunction);
             queries[i] = createBinarizedQueryData(vectorValues, centroid, quantizer, dims);
