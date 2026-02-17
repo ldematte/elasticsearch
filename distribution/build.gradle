@@ -375,6 +375,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
           from(nativeDir) {
             include 'server-launcher'
             include 'server-launcher.exe'
+            eachFile { it.permissions.unix(0755) }
           }
         }
         into('tools/windows-service-cli') {
