@@ -23,6 +23,7 @@ import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.cli.UserException;
 import org.elasticsearch.common.cli.EnvironmentAwareCommand;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.settings.SecureSettings;
 import org.elasticsearch.common.settings.SecureString;
@@ -262,9 +263,6 @@ class ServerCli extends EnvironmentAwareCommand {
 
         Path descriptorPath = tempDir.resolve(DESCRIPTOR_FILENAME);
         descriptor.writeTo(descriptorPath);
-
-        // Print the descriptor path so the startup script can pass it to the launcher
-        terminal.println(descriptorPath.toString());
     }
 
     private static String getJavaCommand(ProcessInfo processInfo) {
@@ -299,7 +297,7 @@ class ServerCli extends EnvironmentAwareCommand {
     private static byte[] serializeServerArgs(ServerArgs args) throws IOException {
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             args.writeTo(out);
-            return out.bytes().toBytesRef().bytes;
+            return BytesReference.toBytes(out.bytes());
         }
     }
 

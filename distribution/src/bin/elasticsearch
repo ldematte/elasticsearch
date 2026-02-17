@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e -o pipefail
-
 source "`dirname "$0"`"/elasticsearch-env
 
 # use a small heap size for the CLI tools, and thus the serial collector to
@@ -10,11 +8,15 @@ CLI_JAVA_OPTS="-Xms4m -Xmx64m -XX:+UseSerialGC ${CLI_JAVA_OPTS}"
 
 LAUNCHER_CLASSPATH=$ES_HOME/lib/*:$ES_HOME/lib/cli-launcher/*
 
+# Ensure ES_TMPDIR is set so the preparer and launcher agree on the descriptor path
+if [ -z "$ES_TMPDIR" ]; then
+  ES_TMPDIR=$(mktemp -d -t elasticsearch-XXXXXXXX)
+  export ES_TMPDIR
+fi
+
 # Run the preparer (server-cli): computes JVM options, auto-configures security,
-# syncs plugins, and writes a launch descriptor file. The descriptor path is
-# printed to stdout.
-DESCRIPTOR_PATH=$( \
-  "$JAVA" \
+# syncs plugins, and writes a launch descriptor file to ES_TMPDIR.
+"$JAVA" \
   $CLI_JAVA_OPTS \
   -Dcli.name="server" \
   -Dcli.script="$0" \
@@ -25,16 +27,17 @@ DESCRIPTOR_PATH=$( \
   -Des.java.type="$JAVA_TYPE" \
   -cp "$LAUNCHER_CLASSPATH" \
   org.elasticsearch.launcher.CliToolLauncher \
-  "$@" \
-)
+  "$@"
 
-# If the preparer failed, exit with its exit code
-if [ $? -ne 0 ]; then
-  exit $?
+PREPARER_EXIT=$?
+if [ $PREPARER_EXIT -ne 0 ]; then
+  exit $PREPARER_EXIT
 fi
 
-# If no descriptor path was printed (e.g. --version was used), just exit
-if [ -z "$DESCRIPTOR_PATH" ]; then
+DESCRIPTOR_PATH="$ES_TMPDIR/launch-descriptor.bin"
+
+# If no descriptor was written (e.g. --version was used), just exit
+if [ ! -f "$DESCRIPTOR_PATH" ]; then
   exit 0
 fi
 

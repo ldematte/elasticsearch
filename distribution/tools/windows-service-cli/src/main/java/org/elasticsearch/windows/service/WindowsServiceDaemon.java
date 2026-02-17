@@ -15,6 +15,7 @@ import org.elasticsearch.bootstrap.ServerArgs;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.common.cli.EnvironmentAwareCommand;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.settings.KeyStoreWrapper;
 import org.elasticsearch.common.settings.SecureString;
@@ -35,7 +36,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 /**
  * Starts an Elasticsearch process, but does not wait for it to exit.
@@ -150,7 +150,7 @@ class WindowsServiceDaemon extends EnvironmentAwareCommand {
     private static byte[] serializeServerArgs(ServerArgs args) throws IOException {
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             args.writeTo(out);
-            return out.bytes().toBytesRef().bytes;
+            return BytesReference.toBytes(out.bytes());
         }
     }
 
