@@ -41,15 +41,22 @@ if [ ! -f "$DESCRIPTOR_PATH" ]; then
   exit 0
 fi
 
+NATIVE_LAUNCHER="$ES_HOME/lib/tools/server-launcher/server-launcher"
 LAUNCHER_LIBS=$ES_HOME/lib/tools/server-launcher/*
 
 # Replace this shell with the launcher process. The launcher reads the descriptor,
 # spawns the server JVM, and manages its lifecycle. Using exec ensures the launcher
 # becomes PID 1 in containers (Docker/Kubernetes), which is critical for proper
 # signal handling.
-exec \
-  "$JAVA" \
-  $CLI_JAVA_OPTS \
-  -cp "$LAUNCHER_LIBS" \
-  org.elasticsearch.server.launcher.ServerLauncher \
-  "$DESCRIPTOR_PATH"
+#
+# Prefer the native binary if present; fall back to the JVM-based launcher.
+if [ -x "$NATIVE_LAUNCHER" ]; then
+  exec "$NATIVE_LAUNCHER" "$DESCRIPTOR_PATH"
+else
+  exec \
+    "$JAVA" \
+    $CLI_JAVA_OPTS \
+    -cp "$LAUNCHER_LIBS" \
+    org.elasticsearch.server.launcher.ServerLauncher \
+    "$DESCRIPTOR_PATH"
+fi

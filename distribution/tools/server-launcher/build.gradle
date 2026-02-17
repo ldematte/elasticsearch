@@ -22,3 +22,46 @@ tasks.named('forbiddenApisMain').configure {
 ["javadoc", "loggerUsageCheck"].each { tsk ->
   tasks.named(tsk).configure { enabled = false }
 }
+
+// --- GraalVM native-image build (opt-in) ---
+
+def nativeImageDir = layout.buildDirectory.dir('native')
+
+def nativeImageTool = providers.provider {
+  def javaHome = System.getenv('JAVA_HOME') ?: System.getProperty('java.home')
+  if (javaHome) {
+    def candidate = file("${javaHome}/bin/native-image")
+    if (candidate.exists()) {
+      return candidate.absolutePath
+    }
+  }
+  // Fall back to PATH
+  return 'native-image'
+}
+
+tasks.register('nativeCompile', Exec) {
+  description = 'Compiles the ServerLauncher into a GraalVM native-image binary'
+  group = 'build'
+
+  dependsOn tasks.named('jar')
+  dependsOn project(':libs:server-launcher-common').tasks.named('jar')
+
+  def launcherJar = tasks.named('jar').flatMap { it.archiveFile }
+  def commonJar = project(':libs:server-launcher-common').tasks.named('jar').flatMap { it.archiveFile }
+  def outputDir = nativeImageDir
+  def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+  def outputName = isWindows ? 'server-launcher.exe' : 'server-launcher'
+
+  inputs.files(launcherJar, commonJar)
+  outputs.file(outputDir.map { it.file(outputName) })
+
+  doFirst {
+    outputDir.get().asFile.mkdirs()
+  }
+
+  executable nativeImageTool.get()
+  args '-cp', "${launcherJar.get().asFile.absolutePath}${File.pathSeparator}${commonJar.get().asFile.absolutePath}"
+  args '--no-fallback'
+  args '-o', outputDir.map { it.file('server-launcher') }.get().asFile.absolutePath
+  args 'org.elasticsearch.server.launcher.ServerLauncher'
+}

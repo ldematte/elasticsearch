@@ -39,15 +39,21 @@ set "DESCRIPTOR_PATH=%ES_TMPDIR%\launch-descriptor.bin"
 rem If no descriptor was written (e.g. --version was used), just exit
 if not exist "%DESCRIPTOR_PATH%" exit /b 0
 
+set "NATIVE_LAUNCHER=%ES_HOME%\lib\tools\server-launcher\server-launcher.exe"
 set LAUNCHER_LIBS=%ES_HOME%/lib/tools/server-launcher/*
 
 rem Run the launcher: reads the descriptor, spawns the server JVM, and manages
 rem its lifecycle. On Windows we run sequentially (no exec equivalent).
-%JAVA% ^
-  %CLI_JAVA_OPTS% ^
-  -cp "%LAUNCHER_LIBS%" ^
-  org.elasticsearch.server.launcher.ServerLauncher ^
-  "%DESCRIPTOR_PATH%"
+rem Prefer the native binary if present; fall back to the JVM-based launcher.
+if exist "%NATIVE_LAUNCHER%" (
+  "%NATIVE_LAUNCHER%" "%DESCRIPTOR_PATH%"
+) else (
+  %JAVA% ^
+    %CLI_JAVA_OPTS% ^
+    -cp "%LAUNCHER_LIBS%" ^
+    org.elasticsearch.server.launcher.ServerLauncher ^
+    "%DESCRIPTOR_PATH%"
+)
 
 exit /b %ERRORLEVEL%
 

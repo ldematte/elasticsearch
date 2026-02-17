@@ -370,6 +370,12 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
         into('tools/server-launcher') {
           from(configurations.libsServerLauncher)
           from(configurations.libsServerLauncherCommon)
+          // Include the native-image binary if it was built (opt-in via nativeCompile task)
+          def nativeDir = project(':distribution:tools:server-launcher').layout.buildDirectory.dir('native')
+          from(nativeDir) {
+            include 'server-launcher'
+            include 'server-launcher.exe'
+          }
         }
         into('tools/windows-service-cli') {
           from(configurations.libsWindowsServiceCli)
