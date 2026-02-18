@@ -9,6 +9,7 @@
 
 package org.elasticsearch.service.windows;
 
+import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;
@@ -50,11 +51,19 @@ class PanamaUtil {
     /**
      * Allocate a wide (UTF-16LE) string in the given arena, null-terminated.
      */
-    static MemorySegment allocateWideString(java.lang.foreign.Arena arena, String s) {
+    static MemorySegment allocateWideString(Arena arena, String s) {
         byte[] bytes = (s + "\0").getBytes(StandardCharsets.UTF_16LE);
         MemorySegment segment = arena.allocateArray(JAVA_BYTE, bytes.length);
         segment.copyFrom(MemorySegment.ofArray(bytes));
         return segment;
+    }
+
+    /**
+     * Creates an upcall stub for a native callback.
+     * In JDK 21, {@code Linker.upcallStub} is a preview API with the same signature as JDK 22+.
+     */
+    static MemorySegment upcallStub(MethodHandle target, FunctionDescriptor descriptor, Arena arena) {
+        return LINKER.upcallStub(target, descriptor, arena);
     }
 
     private PanamaUtil() {}

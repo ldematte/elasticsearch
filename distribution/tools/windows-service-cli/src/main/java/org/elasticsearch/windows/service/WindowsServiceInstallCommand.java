@@ -15,132 +15,55 @@ import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.cli.UserException;
 import org.elasticsearch.core.SuppressForbidden;
+import org.elasticsearch.service.windows.Advapi32Constants;
+import org.elasticsearch.service.windows.WindowsServiceControl;
+import org.elasticsearch.service.windows.WindowsServiceException;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.StringJoiner;
 
 /**
- * Elasticsearch the Elasticsearch Windows service into the Windows Service Registry.
+ * Installs Elasticsearch as a Windows service by registering it directly with the SCM.
+ *
+ * <p>The service binary path is a {@code java.exe} command line that launches
+ * {@link WindowsServiceDaemon} with the minimal set of properties needed to bootstrap.
+ * Only values that require the install-time environment (Java home, ES home, config path,
+ * distribution type) are baked into the binary path; everything else is resolved at
+ * service startup by the daemon itself.
  */
-class WindowsServiceInstallCommand extends ProcrunCommand {
+class WindowsServiceInstallCommand extends ScmCommand {
+
     WindowsServiceInstallCommand() {
-        super("Install Elasticsearch as a Windows Service", "IS");
+        this(WindowsServiceControl.create());
+    }
+
+    WindowsServiceInstallCommand(WindowsServiceControl serviceControl) {
+        super("Install Elasticsearch as a Windows Service", serviceControl);
     }
 
     @Override
-    protected String getAdditionalArgs(String serviceId, ProcessInfo pinfo) {
-        List<String> args = new ArrayList<>();
-        addArg(args, "--Startup", pinfo.envVars().getOrDefault("ES_START_TYPE", "manual"));
-        addArg(args, "--StopTimeout", pinfo.envVars().getOrDefault("ES_STOP_TIMEOUT", "0"));
-        addArg(args, "--StartClass", "org.elasticsearch.launcher.CliToolLauncher");
-        addArg(args, "--StartMethod", "main");
-        addArg(args, "--StopClass", "org.elasticsearch.launcher.CliToolLauncher");
-        addArg(args, "--StopMethod", "close");
-        addArg(args, "--Classpath", pinfo.sysprops().get("java.class.path"));
-        addArg(args, "--JvmMs", "4m");
-        addArg(args, "--JvmMx", "64m");
-        addQuotedArg(args, "--JvmOptions", getJvmOptions(pinfo.sysprops()));
-        addArg(args, "--PidFile", String.format(java.util.Locale.ROOT, "%s.pid", serviceId));
-        addArg(
-            args,
-            "--DisplayName",
-            pinfo.envVars().getOrDefault("SERVICE_DISPLAY_NAME", "Elasticsearch %s (%s)".formatted(Build.current().version(), serviceId))
-        );
-        addArg(
-            args,
-            "--Description",
-            pinfo.envVars()
-                .getOrDefault(
-                    "SERVICE_DESCRIPTION",
-                    String.format(java.util.Locale.ROOT, "Elasticsearch %s Windows Service - https://elastic.co", Build.current().version())
-                )
-        );
-        addQuotedArg(args, "--Jvm", quote(getJvmDll(getJavaHome(pinfo.sysprops())).toString()));
-        addArg(args, "--StartMode", "jvm");
-        addArg(args, "--StopMode", "jvm");
-        addQuotedArg(args, "--StartPath", quote(pinfo.workingDir().toString()));
-        addArg(args, "++JvmOptions", "-Dcli.name=windows-service-daemon");
-        addArg(args, "++JvmOptions", "-Dcli.libs=lib/tools/server-cli,lib/tools/windows-service-cli");
-        addArg(args, "++Environment", String.format(java.util.Locale.ROOT, "HOSTNAME=%s", pinfo.envVars().get("COMPUTERNAME")));
-
-        String serviceUsername = pinfo.envVars().get("SERVICE_USERNAME");
-        if (serviceUsername != null) {
-            String servicePassword = pinfo.envVars().get("SERVICE_PASSWORD");
-            assert servicePassword != null; // validated in preExecute
-            addArg(args, "--ServiceUser", serviceUsername);
-            addArg(args, "--ServicePassword", servicePassword);
-        } else {
-            addArg(args, "--ServiceUser", "LocalSystem");
-        }
-
-        String serviceParams = pinfo.envVars().get("SERVICE_PARAMS");
-        if (serviceParams != null) {
-            args.add(serviceParams);
-        }
-
-        return String.join(" ", args);
-    }
-
-    private static void addArg(List<String> args, String arg, String value) {
-        args.add(arg);
-        if (value.contains(" ")) {
-            value = String.format(java.util.Locale.ROOT, "\"%s\"", value);
-        }
-        args.add(value);
-    }
-
-    // Adds an arg with an already appropriately quoted value. Trivial, but explicit implementation.
-    // This method is typically used when adding args whose value contains a file-system path
-    private static void addQuotedArg(List<String> args, String arg, String value) {
-        args.add(arg);
-        args.add(value);
-    }
-
-    @SuppressForbidden(reason = "get java home path to pass through")
-    private static Path getJavaHome(Map<String, String> sysprops) {
-        return Paths.get(sysprops.get("java.home"));
-    }
-
-    private static Path getJvmDll(Path javaHome) {
-        Path dll = javaHome.resolve("jre/bin/server/jvm.dll");
-        if (Files.exists(dll) == false) {
-            dll = javaHome.resolve("bin/server/jvm.dll");
-        }
-        return dll;
-    }
-
-    private static String getJvmOptions(Map<String, String> sysprops) {
-        List<String> jvmOptions = new ArrayList<>();
-        jvmOptions.add("-XX:+UseSerialGC");
-        // passthrough these properties
-        for (var prop : List.of("es.path.home", "es.path.conf", "es.distribution.type")) {
-            jvmOptions.add("-D%s=%s".formatted(prop, quote(sysprops.get(prop))));
-        }
-        return String.join(";", jvmOptions);
+    protected void executeServiceCommand(WindowsServiceControl serviceControl, String serviceId) throws WindowsServiceException {
+        // actual creation happens in postExecute where we have access to ProcessInfo
     }
 
     @Override
     protected void preExecute(Terminal terminal, ProcessInfo pinfo, String serviceId) throws UserException {
         Path javaHome = getJavaHome(pinfo.sysprops());
-        terminal.println(String.format(java.util.Locale.ROOT, "Installing service : %s", serviceId));
-        terminal.println(String.format(java.util.Locale.ROOT, "Using ES_JAVA_HOME : %s", javaHome.toString()));
+        terminal.println(String.format(Locale.ROOT, "Installing service : %s", serviceId));
+        terminal.println(String.format(Locale.ROOT, "Using ES_JAVA_HOME : %s", javaHome));
 
-        Path javaDll = getJvmDll(javaHome);
-        if (Files.exists(javaDll) == false) {
+        Path javaExe = javaHome.resolve("bin").resolve("java.exe");
+        if (Files.exists(javaExe) == false) {
             throw new UserException(
                 ExitCodes.CONFIG,
-                "Invalid java installation (no jvm.dll found in %s\\jre\\bin\\server\\ or %s\\bin\\server\"). Exiting...".formatted(
-                    javaHome.toString(),
-                    javaHome.toString()
-                )
+                "Invalid java installation (no java.exe found in %s\\bin\\). Exiting...".formatted(javaHome)
             );
         }
 
-        // validate username and password come together
         boolean hasUsername = pinfo.envVars().containsKey("SERVICE_USERNAME");
         if (pinfo.envVars().containsKey("SERVICE_PASSWORD") != hasUsername) {
             throw new UserException(
@@ -151,12 +74,100 @@ class WindowsServiceInstallCommand extends ProcrunCommand {
     }
 
     @Override
+    protected void postExecute(Terminal terminal, ProcessInfo pinfo, String serviceId) throws Exception {
+        WindowsServiceControl serviceControl = getServiceControl();
+
+        String displayName = pinfo.envVars()
+            .getOrDefault("SERVICE_DISPLAY_NAME", "Elasticsearch %s (%s)".formatted(Build.current().version(), serviceId));
+        String description = pinfo.envVars()
+            .getOrDefault(
+                "SERVICE_DESCRIPTION",
+                String.format(Locale.ROOT, "Elasticsearch %s Windows Service - https://elastic.co", Build.current().version())
+            );
+
+        String startTypeStr = pinfo.envVars().getOrDefault("ES_START_TYPE", "manual");
+        int startType = "auto".equalsIgnoreCase(startTypeStr)
+            ? Advapi32Constants.SERVICE_AUTO_START
+            : Advapi32Constants.SERVICE_DEMAND_START;
+
+        String binaryPath = buildBinaryPath(pinfo);
+
+        String serviceUser = pinfo.envVars().get("SERVICE_USERNAME");
+        String servicePassword = pinfo.envVars().get("SERVICE_PASSWORD");
+        if (serviceUser == null) {
+            serviceUser = "LocalSystem";
+        }
+
+        try {
+            serviceControl.createService(serviceId, displayName, binaryPath, startType, serviceUser, servicePassword);
+        } catch (WindowsServiceException e) {
+            throw new UserException(ExitCodes.CODE_ERROR, getFailureMessage(serviceId) + ": " + e.getMessage());
+        }
+
+        try {
+            serviceControl.setServiceDescription(serviceId, description);
+        } catch (WindowsServiceException e) {
+            terminal.errorPrintln("WARNING: Service created but failed to set description: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Builds the service binary path: a {@code java.exe} command line with the minimal
+     * properties needed to bootstrap the daemon. The daemon resolves everything else
+     * (server JVM options, full classpath for the server process, etc.) at startup.
+     */
+    static String buildBinaryPath(ProcessInfo pinfo) {
+        Map<String, String> sysprops = pinfo.sysprops();
+        Path javaExe = getJavaHome(sysprops).resolve("bin").resolve("java.exe");
+        String esHome = sysprops.get("es.path.home");
+
+        StringJoiner cmd = new StringJoiner(" ");
+        cmd.add(quote(javaExe.toString()));
+        cmd.add("-Xms4m");
+        cmd.add("-Xmx64m");
+        cmd.add("-XX:+UseSerialGC");
+        cmd.add(sysProp("es.path.home", esHome));
+        cmd.add(sysProp("es.path.conf", sysprops.get("es.path.conf")));
+        cmd.add(sysProp("es.distribution.type", sysprops.get("es.distribution.type")));
+
+        String classpath = esHome
+            + "\\lib\\*"
+            + ";"
+            + esHome
+            + "\\lib\\tools\\server-cli\\*"
+            + ";"
+            + esHome
+            + "\\lib\\tools\\windows-service-cli\\*";
+        cmd.add("-cp");
+        cmd.add(quote(classpath));
+        cmd.add("org.elasticsearch.windows.service.WindowsServiceDaemon");
+
+        return cmd.toString();
+    }
+
+    private static String sysProp(String key, String value) {
+        if (value != null && value.contains(" ")) {
+            return "-D%s=%s".formatted(key, quote(value));
+        }
+        return "-D%s=%s".formatted(key, value);
+    }
+
+    private static String quote(String s) {
+        return '"' + s + '"';
+    }
+
+    @SuppressForbidden(reason = "get java home path to pass through")
+    private static Path getJavaHome(Map<String, String> sysprops) {
+        return Paths.get(sysprops.get("java.home"));
+    }
+
+    @Override
     protected String getSuccessMessage(String serviceId) {
-        return String.format(java.util.Locale.ROOT, "The service '%s' has been installed", serviceId);
+        return String.format(Locale.ROOT, "The service '%s' has been installed", serviceId);
     }
 
     @Override
     protected String getFailureMessage(String serviceId) {
-        return String.format(java.util.Locale.ROOT, "Failed installing '%s' service", serviceId);
+        return String.format(Locale.ROOT, "Failed installing '%s' service", serviceId);
     }
 }
