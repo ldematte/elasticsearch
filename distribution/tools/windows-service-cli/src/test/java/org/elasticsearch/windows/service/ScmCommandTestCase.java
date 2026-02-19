@@ -87,6 +87,24 @@ public abstract class ScmCommandTestCase extends CommandTestCase {
             }
             return queryResult;
         }
+
+        @Override
+        public void createService(
+            String serviceId,
+            String displayName,
+            String binaryPath,
+            int startType,
+            String serviceUser,
+            String servicePassword
+        ) throws WindowsServiceException {
+            lastOperation = "create";
+            lastServiceId = serviceId;
+        }
+
+        @Override
+        public void setServiceDescription(String serviceId, String description) {
+            lastServiceId = serviceId;
+        }
     }
 
     @Before

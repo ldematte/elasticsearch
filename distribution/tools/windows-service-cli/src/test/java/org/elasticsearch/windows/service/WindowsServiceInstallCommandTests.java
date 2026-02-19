@@ -13,52 +13,90 @@ import org.elasticsearch.Build;
 import org.elasticsearch.cli.Command;
 import org.elasticsearch.cli.ExitCodes;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.service.windows.Advapi32Constants;
+import org.elasticsearch.service.windows.WindowsServiceException;
 import org.junit.Before;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 
-import static java.util.Map.entry;
 import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.any;
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.emptyString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.not;
 
-public class WindowsServiceInstallCommandTests extends WindowsServiceCliTestCase {
+public class WindowsServiceInstallCommandTests extends ScmCommandTestCase {
 
-    Path jvmDll;
+    Path javaHome;
+    MockInstallServiceControl installServiceControl;
+
+    /**
+     * Extends the base mock to capture install-specific fields (binary path, display name,
+     * start type, service user/password, description).
+     */
+    static class MockInstallServiceControl extends MockWindowsServiceControl {
+        String createdDisplayName;
+        String createdBinaryPath;
+        int createdStartType;
+        String createdServiceUser;
+        String createdServicePassword;
+        String descriptionText;
+        WindowsServiceException createException;
+
+        @Override
+        public void createService(
+            String serviceId,
+            String displayName,
+            String binaryPath,
+            int startType,
+            String serviceUser,
+            String servicePassword
+        ) throws WindowsServiceException {
+            super.createService(serviceId, displayName, binaryPath, startType, serviceUser, servicePassword);
+            if (createException != null) {
+                throw createException;
+            }
+            this.createdDisplayName = displayName;
+            this.createdBinaryPath = binaryPath;
+            this.createdStartType = startType;
+            this.createdServiceUser = serviceUser;
+            this.createdServicePassword = servicePassword;
+        }
+
+        @Override
+        public void setServiceDescription(String serviceId, String description) {
+            super.setServiceDescription(serviceId, description);
+            this.descriptionText = description;
+        }
+    }
 
     public WindowsServiceInstallCommandTests(boolean spaceInPath) {
         super(spaceInPath);
     }
 
     @Before
-    public void setupJvm() throws Exception {
-        jvmDll = javaHome.resolve("jre/bin/server/jvm.dll");
-        Files.createDirectories(jvmDll.getParent());
-        Files.createFile(jvmDll);
-        sysprops.put("java.class.path", "javaclasspath");
+    public void setupInstall() throws Exception {
+        javaHome = createTempDir();
+        Path javaExe = javaHome.resolve("bin").resolve("java.exe");
+        Files.createDirectories(javaExe.getParent());
+        Files.createFile(javaExe);
+        sysprops.put("java.home", javaHome.toString());
+        sysprops.put("es.distribution.type", "zip");
         envVars.put("COMPUTERNAME", "mycomputer");
+        installServiceControl = new MockInstallServiceControl();
+        mockServiceControl = installServiceControl;
     }
 
     @Override
     protected Command newCommand() {
-        return new WindowsServiceInstallCommand() {
-            @Override
-            Process startProcess(ProcessBuilder processBuilder) throws IOException {
-                return mockProcess(processBuilder);
-            }
-        };
+        return new WindowsServiceInstallCommand(installServiceControl);
     }
 
     @Override
-    protected String getCommand() {
-        return "IS";
+    protected String getExpectedOperation() {
+        return "create";
     }
 
     @Override
@@ -71,24 +109,6 @@ public class WindowsServiceInstallCommandTests extends WindowsServiceCliTestCase
         return "Failed installing 'elasticsearch-service-x64' service";
     }
 
-    public void testDllMissing() throws Exception {
-        Files.delete(jvmDll);
-        assertThat(executeMain(), equalTo(ExitCodes.CONFIG));
-        assertThat(terminal.getErrorOutput(), containsString("Invalid java installation (no jvm.dll"));
-    }
-
-    public void testAlternateDllLocation() throws Exception {
-        Files.delete(jvmDll);
-        Path altJvmDll = javaHome.resolve("bin/server/jvm.dll");
-        Files.createDirectories(altJvmDll.getParent());
-        Files.createFile(altJvmDll);
-        assertServiceArgs(Map.of());
-    }
-
-    public void testDll() throws Exception {
-        assertServiceArgs(Map.of("Jvm", quote(jvmDll.toString())));
-    }
-
     public void testPreExecuteOutput() throws Exception {
         envVars.put("SERVICE_ID", "myservice");
         assertOkWithOutput(
@@ -97,80 +117,93 @@ public class WindowsServiceInstallCommandTests extends WindowsServiceCliTestCase
         );
     }
 
-    public void testJvmOptions() throws Exception {
-        sysprops.put("es.distribution.type", "testdistro");
-        List<String> expectedOptions = List.of(
-            "" + "-XX:+UseSerialGC",
-            "-Des.path.home=" + quote(esHomeDir.toString()),
-            "-Des.path.conf=" + quote(esHomeDir.resolve("config").toString()),
-            "-Des.distribution.type=" + quote("testdistro")
-        );
-        mockProcessValidator = (environment, procrunCall) -> {
-            List<String> options = procrunCall.args().get("JvmOptions");
-            assertThat(
-                options,
-                containsInAnyOrder(
-                    "-Dcli.name=windows-service-daemon",
-                    "-Dcli.libs=lib/tools/server-cli,lib/tools/windows-service-cli",
-                    String.join(";", expectedOptions)
-                )
-            );
-        };
-        assertOkWithOutput(any(String.class), emptyString());
+    public void testJavaMissing() throws Exception {
+        Files.delete(javaHome.resolve("bin").resolve("java.exe"));
+        assertThat(executeMain(), equalTo(ExitCodes.CONFIG));
+        assertThat(terminal.getErrorOutput(), containsString("Invalid java installation (no java.exe"));
+    }
+
+    public void testBinaryPathContainsJavaExe() throws Exception {
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdBinaryPath, containsString("java.exe"));
+    }
+
+    public void testBinaryPathContainsMainClass() throws Exception {
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdBinaryPath, containsString("WindowsServiceDaemon"));
+    }
+
+    public void testBinaryPathContainsEsHome() throws Exception {
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdBinaryPath, containsString("-Des.path.home="));
+        assertThat(installServiceControl.createdBinaryPath, containsString(esHomeDir.toString()));
+    }
+
+    public void testBinaryPathContainsClasspath() throws Exception {
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdBinaryPath, containsString("lib\\tools\\server-cli"));
+        assertThat(installServiceControl.createdBinaryPath, containsString("lib\\tools\\windows-service-cli"));
+    }
+
+    public void testBinaryPathContainsJvmOptions() throws Exception {
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdBinaryPath, containsString("-XX:+UseSerialGC"));
+        assertThat(installServiceControl.createdBinaryPath, containsString("-Xms4m"));
+        assertThat(installServiceControl.createdBinaryPath, containsString("-Xmx64m"));
+    }
+
+    public void testBinaryPathDoesNotContainServerSpecificOptions() throws Exception {
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdBinaryPath, not(containsString("cli.name")));
+        assertThat(installServiceControl.createdBinaryPath, not(containsString("cli.libs")));
+        assertThat(installServiceControl.createdBinaryPath, not(containsString("CliToolLauncher")));
     }
 
     public void testStartupType() throws Exception {
-        assertServiceArgs(Map.of("Startup", "manual"));
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdStartType, equalTo(Advapi32Constants.SERVICE_DEMAND_START));
+
+        installServiceControl = new MockInstallServiceControl();
+        mockServiceControl = installServiceControl;
+        terminal.reset();
         envVars.put("ES_START_TYPE", "auto");
-        assertServiceArgs(Map.of("Startup", "auto"));
-    }
-
-    public void testStopTimeout() throws Exception {
-        assertServiceArgs(Map.of("StopTimeout", "0"));
-        envVars.put("ES_STOP_TIMEOUT", "5");
-        assertServiceArgs(Map.of("StopTimeout", "5"));
-    }
-
-    public void testFixedArgs() throws Exception {
-        assertServiceArgs(
-            Map.ofEntries(
-                entry("StartClass", "org.elasticsearch.launcher.CliToolLauncher"),
-                entry("StartMethod", "main"),
-                entry("StartMode", "jvm"),
-                entry("StopClass", "org.elasticsearch.launcher.CliToolLauncher"),
-                entry("StopMethod", "close"),
-                entry("StopMode", "jvm"),
-                entry("JvmMs", "4m"),
-                entry("JvmMx", "64m"),
-                entry("StartPath", quote(esHomeDir.toString())),
-                entry("Classpath", "javaclasspath") // dummy value for tests
-            )
-        );
-    }
-
-    public void testPidFile() throws Exception {
-        assertServiceArgs(Map.of("PidFile", "elasticsearch-service-x64.pid"));
-        envVars.put("SERVICE_ID", "myservice");
-        assertServiceArgs(Map.of("PidFile", "myservice.pid"));
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdStartType, equalTo(Advapi32Constants.SERVICE_AUTO_START));
     }
 
     public void testDisplayName() throws Exception {
-        assertServiceArgs(
-            Map.of("DisplayName", Strings.format("\"Elasticsearch %s (elasticsearch-service-x64)\"", Build.current().version()))
-        );
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        String expectedDefault = Strings.format("Elasticsearch %s (elasticsearch-service-x64)", Build.current().version());
+        assertThat(installServiceControl.createdDisplayName, equalTo(expectedDefault));
+
+        installServiceControl = new MockInstallServiceControl();
+        mockServiceControl = installServiceControl;
+        terminal.reset();
         envVars.put("SERVICE_DISPLAY_NAME", "my service name");
-        assertServiceArgs(Map.of("DisplayName", "\"my service name\""));
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdDisplayName, equalTo("my service name"));
     }
 
     public void testDescription() throws Exception {
-        String defaultDescription = Strings.format("\"Elasticsearch %s Windows Service - https://elastic.co\"", Build.current().version());
-        assertServiceArgs(Map.of("Description", defaultDescription));
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        String expectedDefault = String.format(
+            Locale.ROOT,
+            "Elasticsearch %s Windows Service - https://elastic.co",
+            Build.current().version()
+        );
+        assertThat(installServiceControl.descriptionText, equalTo(expectedDefault));
+
+        installServiceControl = new MockInstallServiceControl();
+        mockServiceControl = installServiceControl;
+        terminal.reset();
         envVars.put("SERVICE_DESCRIPTION", "my description");
-        assertServiceArgs(Map.of("Description", "\"my description\""));
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.descriptionText, equalTo("my description"));
     }
 
     public void testUsernamePassword() throws Exception {
-        assertServiceArgs(Map.of("ServiceUser", "LocalSystem"));
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdServiceUser, equalTo("LocalSystem"));
 
         terminal.reset();
         envVars.put("SERVICE_USERNAME", "myuser");
@@ -183,14 +216,20 @@ public class WindowsServiceInstallCommandTests extends WindowsServiceCliTestCase
         assertThat(executeMain(), equalTo(ExitCodes.CONFIG));
         assertThat(terminal.getErrorOutput(), containsString("Both service username and password must be set"));
 
+        installServiceControl = new MockInstallServiceControl();
+        mockServiceControl = installServiceControl;
         terminal.reset();
         envVars.put("SERVICE_USERNAME", "myuser");
         envVars.put("SERVICE_PASSWORD", "mypassword");
-        assertServiceArgs(Map.of("ServiceUser", "myuser", "ServicePassword", "mypassword"));
+        assertOkWithOutput(containsString("has been installed"), emptyString());
+        assertThat(installServiceControl.createdServiceUser, equalTo("myuser"));
+        assertThat(installServiceControl.createdServicePassword, equalTo("mypassword"));
     }
 
-    public void testExtraServiceParams() throws Exception {
-        envVars.put("SERVICE_PARAMS", "--MyExtraArg \"and value\"");
-        assertServiceArgs(Map.of("MyExtraArg", "\"and value\""));
+    public void testCreateServiceFailure() throws Exception {
+        installServiceControl.createException = new WindowsServiceException("access denied", 5);
+        assertThat(executeMain(), equalTo(ExitCodes.CODE_ERROR));
+        assertThat(terminal.getErrorOutput(), containsString("Failed installing"));
+        assertThat(terminal.getErrorOutput(), containsString("access denied"));
     }
 }

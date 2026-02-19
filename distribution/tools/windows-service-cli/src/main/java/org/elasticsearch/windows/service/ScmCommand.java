@@ -30,7 +30,7 @@ import java.util.Map;
  */
 abstract class ScmCommand extends Command {
 
-    private final WindowsServiceControl serviceControl;
+    protected final WindowsServiceControl serviceControl;
 
     /**
      * Constructs a CLI subcommand that uses the SCM for service control.
@@ -42,17 +42,13 @@ abstract class ScmCommand extends Command {
         this.serviceControl = serviceControl;
     }
 
-    protected WindowsServiceControl getServiceControl() {
-        return serviceControl;
-    }
-
     @Override
     protected void execute(Terminal terminal, OptionSet options, ProcessInfo processInfo) throws Exception {
         String serviceId = getServiceId(options, processInfo.envVars());
-        preExecute(terminal, processInfo, serviceId);
+        validateCommand(processInfo);
 
         try {
-            executeServiceCommand(serviceControl, serviceId);
+            executeServiceCommand(terminal, processInfo, serviceId);
         } catch (WindowsServiceException e) {
             throw new UserException(ExitCodes.CODE_ERROR, getFailureMessage(serviceId) + ": " + e.getMessage());
         }
@@ -63,11 +59,13 @@ abstract class ScmCommand extends Command {
 
     /**
      * Performs the actual service control operation.
-     * @param serviceControl the service control API
+     * @param terminal the terminal for output
+     * @param processInfo the process information
      * @param serviceId the service name
      * @throws WindowsServiceException if the operation fails
      */
-    protected abstract void executeServiceCommand(WindowsServiceControl serviceControl, String serviceId) throws WindowsServiceException;
+    protected abstract void executeServiceCommand(Terminal terminal, ProcessInfo processInfo, String serviceId)
+        throws WindowsServiceException;
 
     /** Determines the service id for the Elasticsearch service that should be used. */
     private static String getServiceId(OptionSet options, Map<String, String> env) throws UserException {
@@ -85,10 +83,11 @@ abstract class ScmCommand extends Command {
     }
 
     /**
-     * A hook to add logging and validation before executing the service command.
-     * @throws UserException if there is a problem with the command invocation
+     * Validates the command arguments.
+     * @param processInfo the process information
+     * @throws UserException if the command arguments are invalid
      */
-    protected void preExecute(Terminal terminal, ProcessInfo pinfo, String serviceId) throws UserException {}
+    protected void validateCommand(ProcessInfo processInfo) throws UserException {}
 
     /**
      * A hook for additional work after the service command succeeds (e.g. polling for stop completion).

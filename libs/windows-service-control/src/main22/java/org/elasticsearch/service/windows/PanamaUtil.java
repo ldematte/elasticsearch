@@ -48,5 +48,9 @@ class PanamaUtil {
         return segment;
     }
 
+    static MemorySegment upcallStub(MethodHandle target, FunctionDescriptor descriptor, Arena arena) {
+        return LINKER.upcallStub(target, descriptor, arena);
+    }
+
     private PanamaUtil() {}
 }

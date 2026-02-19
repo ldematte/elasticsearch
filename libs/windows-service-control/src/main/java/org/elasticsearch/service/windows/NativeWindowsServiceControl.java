@@ -12,6 +12,7 @@ package org.elasticsearch.service.windows;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 
+import static java.lang.foreign.ValueLayout.ADDRESS;
 import static java.lang.foreign.ValueLayout.JAVA_INT;
 
 /**
@@ -113,6 +114,75 @@ class NativeWindowsServiceControl implements WindowsServiceControl {
                         (int) Advapi32.dwCheckPoint$vh.get(buffer),
                         (int) Advapi32.dwWaitHint$vh.get(buffer)
                     );
+                } finally {
+                    advapi32.closeServiceHandle(service);
+                }
+            } finally {
+                advapi32.closeServiceHandle(scManager);
+            }
+        }
+    }
+
+    @Override
+    public void createService(
+        String serviceId,
+        String displayName,
+        String binaryPath,
+        int startType,
+        String serviceUser,
+        String servicePassword
+    ) throws WindowsServiceException {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment scManager = openScManager();
+            try {
+                MemorySegment serviceNameW = PanamaUtil.allocateWideString(arena, serviceId);
+                MemorySegment displayNameW = PanamaUtil.allocateWideString(arena, displayName);
+                MemorySegment binaryPathW = PanamaUtil.allocateWideString(arena, binaryPath);
+                MemorySegment serviceUserW = serviceUser != null ? PanamaUtil.allocateWideString(arena, serviceUser) : MemorySegment.NULL;
+                MemorySegment passwordW = servicePassword != null
+                    ? PanamaUtil.allocateWideString(arena, servicePassword)
+                    : MemorySegment.NULL;
+
+                MemorySegment handle = advapi32.createService(
+                    scManager,
+                    serviceNameW,
+                    displayNameW,
+                    Advapi32.SERVICE_ALL_ACCESS,
+                    Advapi32.SERVICE_WIN32_OWN_PROCESS,
+                    startType,
+                    Advapi32.SERVICE_ERROR_NORMAL,
+                    binaryPathW,
+                    serviceUserW,
+                    passwordW
+                );
+                if (handle.equals(MemorySegment.NULL) || handle.address() == 0) {
+                    throw new WindowsServiceException("Failed to create service '" + serviceId + "'", advapi32.getLastError());
+                }
+                advapi32.closeServiceHandle(handle);
+            } finally {
+                advapi32.closeServiceHandle(scManager);
+            }
+        }
+    }
+
+    @Override
+    public void setServiceDescription(String serviceId, String description) throws WindowsServiceException {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment scManager = openScManager();
+            try {
+                MemorySegment service = openService(scManager, serviceId, arena);
+                try {
+                    MemorySegment descW = PanamaUtil.allocateWideString(arena, description);
+                    // SERVICE_DESCRIPTIONW struct: { LPWSTR lpDescription }
+                    MemorySegment descStruct = arena.allocate(ADDRESS.byteSize(), ADDRESS.byteAlignment());
+                    descStruct.set(ADDRESS, 0, descW);
+
+                    if (advapi32.changeServiceConfig2(service, Advapi32.SERVICE_CONFIG_DESCRIPTION, descStruct) == false) {
+                        throw new WindowsServiceException(
+                            "Failed to set description for service '" + serviceId + "'",
+                            advapi32.getLastError()
+                        );
+                    }
                 } finally {
                     advapi32.closeServiceHandle(service);
                 }
