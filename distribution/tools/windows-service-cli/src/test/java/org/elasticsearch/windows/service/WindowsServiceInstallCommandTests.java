@@ -12,6 +12,7 @@ package org.elasticsearch.windows.service;
 import org.elasticsearch.Build;
 import org.elasticsearch.cli.Command;
 import org.elasticsearch.cli.ExitCodes;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.service.windows.Advapi32Constants;
 import org.elasticsearch.service.windows.WindowsServiceException;
 import org.junit.Before;
@@ -172,7 +173,7 @@ public class WindowsServiceInstallCommandTests extends ScmCommandTestCase {
 
     public void testDisplayName() throws Exception {
         assertOkWithOutput(containsString("has been installed"), emptyString());
-        String expectedDefault = "Elasticsearch %s (elasticsearch-service-x64)".formatted(Build.current().version());
+        String expectedDefault = Strings.format("Elasticsearch %s (elasticsearch-service-x64)", Build.current().version());
         assertThat(installServiceControl.createdDisplayName, equalTo(expectedDefault));
 
         installServiceControl = new MockInstallServiceControl();

@@ -46,16 +46,41 @@ class WindowsServiceInstallCommand extends ScmCommand {
     }
 
     @Override
-    protected void executeServiceCommand(WindowsServiceControl serviceControl, String serviceId) throws WindowsServiceException {
-        // actual creation happens in postExecute where we have access to ProcessInfo
-    }
-
-    @Override
-    protected void preExecute(Terminal terminal, ProcessInfo pinfo, String serviceId) throws UserException {
-        Path javaHome = getJavaHome(pinfo.sysprops());
+    protected void executeServiceCommand(Terminal terminal, ProcessInfo processInfo, String serviceId) throws WindowsServiceException {
+        Path javaHome = getJavaHome(processInfo.sysprops());
         terminal.println(String.format(Locale.ROOT, "Installing service : %s", serviceId));
         terminal.println(String.format(Locale.ROOT, "Using ES_JAVA_HOME : %s", javaHome));
 
+        var serviceInfo = extractServiceInfo(processInfo, serviceId);
+
+        serviceControl.createService(
+            serviceId,
+            serviceInfo.displayName,
+            serviceInfo.binaryPath,
+            serviceInfo.startType,
+            serviceInfo.serviceUser,
+            serviceInfo.servicePassword
+        );
+
+        try {
+            serviceControl.setServiceDescription(serviceId, serviceInfo.description);
+        } catch (WindowsServiceException e) {
+            terminal.errorPrintln("WARNING: Service created but failed to set description: " + e.getMessage());
+        }
+    }
+
+    private record ServiceInfo(
+        String displayName,
+        String description,
+        String binaryPath,
+        int startType,
+        String serviceUser,
+        String servicePassword
+    ) {}
+
+    @Override
+    protected void validateCommand(ProcessInfo processInfo) throws UserException {
+        Path javaHome = getJavaHome(processInfo.sysprops());
         Path javaExe = javaHome.resolve("bin").resolve("java.exe");
         if (Files.exists(javaExe) == false) {
             throw new UserException(
@@ -64,8 +89,8 @@ class WindowsServiceInstallCommand extends ScmCommand {
             );
         }
 
-        boolean hasUsername = pinfo.envVars().containsKey("SERVICE_USERNAME");
-        if (pinfo.envVars().containsKey("SERVICE_PASSWORD") != hasUsername) {
+        boolean hasUsername = processInfo.envVars().containsKey("SERVICE_USERNAME");
+        if (processInfo.envVars().containsKey("SERVICE_PASSWORD") != hasUsername) {
             throw new UserException(
                 ExitCodes.CONFIG,
                 "Both service username and password must be set, only got " + (hasUsername ? "SERVICE_USERNAME" : "SERVICE_PASSWORD")
@@ -73,10 +98,7 @@ class WindowsServiceInstallCommand extends ScmCommand {
         }
     }
 
-    @Override
-    protected void postExecute(Terminal terminal, ProcessInfo pinfo, String serviceId) throws Exception {
-        WindowsServiceControl serviceControl = getServiceControl();
-
+    private ServiceInfo extractServiceInfo(ProcessInfo pinfo, String serviceId) {
         String displayName = pinfo.envVars()
             .getOrDefault("SERVICE_DISPLAY_NAME", "Elasticsearch %s (%s)".formatted(Build.current().version(), serviceId));
         String description = pinfo.envVars()
@@ -92,23 +114,10 @@ class WindowsServiceInstallCommand extends ScmCommand {
 
         String binaryPath = buildBinaryPath(pinfo);
 
-        String serviceUser = pinfo.envVars().get("SERVICE_USERNAME");
+        String serviceUser = pinfo.envVars().getOrDefault("SERVICE_USERNAME", "LocalSystem");
         String servicePassword = pinfo.envVars().get("SERVICE_PASSWORD");
-        if (serviceUser == null) {
-            serviceUser = "LocalSystem";
-        }
 
-        try {
-            serviceControl.createService(serviceId, displayName, binaryPath, startType, serviceUser, servicePassword);
-        } catch (WindowsServiceException e) {
-            throw new UserException(ExitCodes.CODE_ERROR, getFailureMessage(serviceId) + ": " + e.getMessage());
-        }
-
-        try {
-            serviceControl.setServiceDescription(serviceId, description);
-        } catch (WindowsServiceException e) {
-            terminal.errorPrintln("WARNING: Service created but failed to set description: " + e.getMessage());
-        }
+        return new ServiceInfo(displayName, description, binaryPath, startType, serviceUser, servicePassword);
     }
 
     /**

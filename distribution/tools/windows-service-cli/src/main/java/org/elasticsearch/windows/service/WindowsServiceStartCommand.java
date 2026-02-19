@@ -9,6 +9,8 @@
 
 package org.elasticsearch.windows.service;
 
+import org.elasticsearch.cli.ProcessInfo;
+import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.service.windows.WindowsServiceControl;
 import org.elasticsearch.service.windows.WindowsServiceException;
 
@@ -28,7 +30,7 @@ class WindowsServiceStartCommand extends ScmCommand {
     }
 
     @Override
-    protected void executeServiceCommand(WindowsServiceControl serviceControl, String serviceId) throws WindowsServiceException {
+    protected void executeServiceCommand(Terminal terminal, ProcessInfo processInfo, String serviceId) throws WindowsServiceException {
         serviceControl.startService(serviceId);
     }
 

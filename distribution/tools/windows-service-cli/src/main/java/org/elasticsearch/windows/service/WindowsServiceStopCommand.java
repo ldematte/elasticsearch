@@ -14,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.cli.UserException;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.service.windows.ServiceStatus;
 import org.elasticsearch.service.windows.WindowsServiceControl;
 import org.elasticsearch.service.windows.WindowsServiceException;
@@ -47,7 +48,7 @@ class WindowsServiceStopCommand extends ScmCommand {
     }
 
     @Override
-    protected void executeServiceCommand(WindowsServiceControl serviceControl, String serviceId) throws WindowsServiceException {
+    protected void executeServiceCommand(Terminal terminal, ProcessInfo processInfo, String serviceId) throws WindowsServiceException {
         serviceControl.stopService(serviceId);
     }
 
@@ -136,9 +137,9 @@ class WindowsServiceStopCommand extends ScmCommand {
 
     ServiceStatus queryStatus(String serviceId) {
         try {
-            return getServiceControl().queryStatus(serviceId);
+            return serviceControl.queryStatus(serviceId);
         } catch (WindowsServiceException e) {
-            logger.warn("Failed to query service status for [{}]", serviceId, e);
+            logger.warn(Strings.format("Failed to query service status for [%s]", serviceId), e);
             return ServiceStatus.unknown();
         }
     }
