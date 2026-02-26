@@ -18,13 +18,16 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Minimal launcher for the Elasticsearch server process.
  *
- * <p> This program reads a {@link LaunchDescriptor} from a binary file, spawns the server JVM process,
+ * <p> This program is exec'd directly by the startup script. It spawns the preparer (server-cli)
+ * as a child process, reads the resulting {@link LaunchDescriptor}, spawns the server JVM process,
  * pipes the serialized ServerArgs bytes to the server's stdin, pumps stderr for the ready marker,
  * and waits for the server to exit.
  *
@@ -36,44 +39,27 @@ public class ServerLauncher {
     private static volatile ServerProcess server;
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 1) {
-            System.err.println("Usage: server-launcher [--dump] <descriptor-path>");
-            System.exit(1);
-        }
-
-        boolean dump = false;
-        String descriptorPath = null;
-
-        for (String arg : args) {
-            if ("--dump".equals(arg)) {
-                dump = true;
-            } else {
-                descriptorPath = arg;
-            }
-        }
-
-        if (descriptorPath == null) {
-            System.err.println("Error: descriptor path is required");
-            System.exit(1);
-        }
-
-        Path path = Path.of(descriptorPath);
-        if (Files.exists(path) == false) {
-            System.err.println("Error: descriptor file not found: " + descriptorPath);
-            System.exit(1);
-        }
-
-        LaunchDescriptor descriptor = LaunchDescriptor.readFrom(path);
-
-        if (dump) {
+        if (args.length >= 2 && "--dump".equals(args[0])) {
+            LaunchDescriptor descriptor = LaunchDescriptor.readFrom(Path.of(args[1]));
             System.out.println(descriptor.toHumanReadable());
             return;
         }
 
-        // Delete the descriptor file now that we've read it
-        Files.deleteIfExists(path);
+        String tempDir = setupTempDir();
 
-        // Register shutdown hook before starting the server
+        int preparerExit = runPreparer(args, tempDir);
+        if (preparerExit != 0) {
+            System.exit(preparerExit);
+        }
+
+        Path descriptorPath = Path.of(tempDir, LaunchDescriptor.DESCRIPTOR_FILENAME);
+        if (Files.exists(descriptorPath) == false) {
+            return;
+        }
+
+        LaunchDescriptor descriptor = LaunchDescriptor.readFrom(descriptorPath);
+        Files.deleteIfExists(descriptorPath);
+
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             synchronized (shuttingDown) {
                 shuttingDown.set(true);
@@ -98,6 +84,93 @@ public class ServerLauncher {
         if (exitCode != 0) {
             System.exit(exitCode);
         }
+    }
+
+    private static String setupTempDir() throws IOException {
+        String existing = System.getenv("ES_TMPDIR");
+        if (existing != null) {
+            Path p = Path.of(existing);
+            if (Files.exists(p) == false) {
+                System.err.println("Error: ES_TMPDIR does not exist: " + existing);
+                System.exit(1);
+            }
+            if (Files.isDirectory(p) == false) {
+                System.err.println("Error: ES_TMPDIR is not a directory: " + existing);
+                System.exit(1);
+            }
+            return existing;
+        }
+        boolean isWindows = System.getProperty("os.name", "").startsWith("Windows");
+        Path tempDir;
+        if (isWindows) {
+            tempDir = Path.of(System.getProperty("java.io.tmpdir"), "elasticsearch");
+            Files.createDirectories(tempDir);
+        } else {
+            tempDir = Files.createTempDirectory("elasticsearch-");
+        }
+        return tempDir.toString();
+    }
+
+    private static int runPreparer(String[] userArgs, String tempDir) throws IOException, InterruptedException {
+        String java = requireEnv("JAVA");
+        String esHome = requireEnv("ES_HOME");
+        String esPathConf = requireEnv("ES_PATH_CONF");
+        String esDistType = System.getenv("ES_DISTRIBUTION_TYPE");
+        String javaType = System.getenv("JAVA_TYPE");
+        String cliJavaOpts = System.getenv("CLI_JAVA_OPTS");
+
+        String classpath = esHome
+            + File.separator
+            + "lib"
+            + File.separator
+            + "*"
+            + File.pathSeparator
+            + esHome
+            + File.separator
+            + "lib"
+            + File.separator
+            + "cli-launcher"
+            + File.separator
+            + "*";
+
+        List<String> command = new ArrayList<>();
+        command.add(java);
+
+        if (cliJavaOpts != null && cliJavaOpts.isBlank() == false) {
+            Collections.addAll(command, cliJavaOpts.trim().split("\\s+"));
+        }
+
+        command.add("-Dcli.name=server");
+        command.add("-Dcli.libs=lib/tools/server-cli");
+        command.add("-Des.path.home=" + esHome);
+        command.add("-Des.path.conf=" + esPathConf);
+        if (esDistType != null) {
+            command.add("-Des.distribution.type=" + esDistType);
+        }
+        if (javaType != null) {
+            command.add("-Des.java.type=" + javaType);
+        }
+        command.add("-cp");
+        command.add(classpath);
+        command.add("org.elasticsearch.launcher.CliToolLauncher");
+
+        command.addAll(Arrays.asList(userArgs));
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.inheritIO();
+        pb.environment().put("ES_TMPDIR", tempDir);
+
+        Process process = pb.start();
+        return process.waitFor();
+    }
+
+    private static String requireEnv(String name) {
+        String value = System.getenv(name);
+        if (value == null || value.isBlank()) {
+            System.err.println("Error: required environment variable " + name + " is not set");
+            System.exit(1);
+        }
+        return value;
     }
 
     private static ServerProcess startServer(LaunchDescriptor descriptor) throws Exception {

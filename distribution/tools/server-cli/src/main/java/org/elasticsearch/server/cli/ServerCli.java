@@ -51,8 +51,6 @@ import java.util.Map;
  */
 class ServerCli extends EnvironmentAwareCommand {
 
-    static final String DESCRIPTOR_FILENAME = "launch-descriptor.bin";
-
     private final OptionSpecBuilder versionOption;
     private final OptionSpecBuilder daemonizeOption;
     private final OptionSpec<Path> pidfileOption;
@@ -261,7 +259,7 @@ class ServerCli extends EnvironmentAwareCommand {
             serverArgsBytes
         );
 
-        Path descriptorPath = tempDir.resolve(DESCRIPTOR_FILENAME);
+        Path descriptorPath = tempDir.resolve(LaunchDescriptor.DESCRIPTOR_FILENAME);
         descriptor.writeTo(descriptorPath);
     }
 

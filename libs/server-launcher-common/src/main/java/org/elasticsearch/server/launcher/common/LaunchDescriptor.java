@@ -48,6 +48,8 @@ public record LaunchDescriptor(
     byte[] serverArgsBytes
 ) {
 
+    public static final String DESCRIPTOR_FILENAME = "launch-descriptor.bin";
+
     private static final int MAGIC = 0x45534C44; // "ESLD" - ElasticSearch Launch Descriptor
     private static final int VERSION = 1;
 

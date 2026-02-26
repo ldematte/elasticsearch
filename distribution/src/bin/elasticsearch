@@ -6,57 +6,18 @@ source "`dirname "$0"`"/elasticsearch-env
 # avoid stealing many CPU cycles; a user can override by setting CLI_JAVA_OPTS
 CLI_JAVA_OPTS="-Xms4m -Xmx64m -XX:+UseSerialGC ${CLI_JAVA_OPTS}"
 
-LAUNCHER_CLASSPATH=$ES_HOME/lib/*:$ES_HOME/lib/cli-launcher/*
-
-# Ensure ES_TMPDIR is set so the preparer and launcher agree on the descriptor path
-if [ -z "$ES_TMPDIR" ]; then
-  ES_TMPDIR=$(mktemp -d -t elasticsearch-XXXXXXXX)
-  export ES_TMPDIR
-fi
-
-# Run the preparer (server-cli): computes JVM options, auto-configures security,
-# syncs plugins, and writes a launch descriptor file to ES_TMPDIR.
-"$JAVA" \
-  $CLI_JAVA_OPTS \
-  -Dcli.name="server" \
-  -Dcli.script="$0" \
-  -Dcli.libs="lib/tools/server-cli" \
-  -Des.path.home="$ES_HOME" \
-  -Des.path.conf="$ES_PATH_CONF" \
-  -Des.distribution.type="$ES_DISTRIBUTION_TYPE" \
-  -Des.java.type="$JAVA_TYPE" \
-  -cp "$LAUNCHER_CLASSPATH" \
-  org.elasticsearch.launcher.CliToolLauncher \
-  "$@"
-
-PREPARER_EXIT=$?
-if [ $PREPARER_EXIT -ne 0 ]; then
-  exit $PREPARER_EXIT
-fi
-
-DESCRIPTOR_PATH="$ES_TMPDIR/launch-descriptor.bin"
-
-# If no descriptor was written (e.g. --version was used), just exit
-if [ ! -f "$DESCRIPTOR_PATH" ]; then
-  exit 0
-fi
+export JAVA ES_HOME ES_PATH_CONF ES_DISTRIBUTION_TYPE JAVA_TYPE CLI_JAVA_OPTS
 
 NATIVE_LAUNCHER="$ES_HOME/lib/tools/server-launcher/server-launcher"
 LAUNCHER_LIBS=$ES_HOME/lib/tools/server-launcher/*
 
-# Replace this shell with the launcher process. The launcher reads the descriptor,
-# spawns the server JVM, and manages its lifecycle. Using exec ensures the launcher
-# becomes PID 1 in containers (Docker/Kubernetes), which is critical for proper
-# signal handling.
-#
-# Prefer the native binary if present; fall back to the JVM-based launcher.
 if [ -x "$NATIVE_LAUNCHER" ]; then
-  exec "$NATIVE_LAUNCHER" "$DESCRIPTOR_PATH"
+  exec "$NATIVE_LAUNCHER" "$@"
 else
   exec \
     "$JAVA" \
     $CLI_JAVA_OPTS \
     -cp "$LAUNCHER_LIBS" \
     org.elasticsearch.server.launcher.ServerLauncher \
-    "$DESCRIPTOR_PATH"
+    "$@"
 fi

@@ -371,8 +371,8 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
           from(configurations.libsServerLauncher)
           from(configurations.libsServerLauncherCommon)
           // Include the native-image binary if it was built (opt-in via nativeCompile task)
-          def nativeDir = project(':distribution:tools:server-launcher').layout.buildDirectory.dir('native')
-          from(nativeDir) {
+          def nativeCompileTask = project(':distribution:tools:server-launcher').tasks.named('nativeCompile')
+          from(nativeCompileTask) {
             include 'server-launcher'
             include 'server-launcher.exe'
           }
