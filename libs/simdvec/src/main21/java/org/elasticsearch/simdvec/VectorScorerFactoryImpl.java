@@ -107,7 +107,7 @@ final class VectorScorerFactoryImpl implements VectorScorerFactory {
 
         @Override
         public MemorySegment entireSegmentOrNull() {
-            return null;
+            return store.getBufferSegment();
         }
 
         @Override

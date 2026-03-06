@@ -9,42 +9,66 @@
 
 package org.elasticsearch.simdvec;
 
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
+
 import java.io.Closeable;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
- * Off-heap byte vector storage backed by paged {@link MemorySegment}s.
- * Vectors are packed into pages of {@link #PAGE_SIZE} vectors each,
- * reducing allocation overhead and improving spatial locality compared
- * to one-segment-per-vector. The last page may be partially filled.
+ * Off-heap byte vector storage backed by a single contiguous {@link MemorySegment}.
+ * The buffer doubles in capacity when full (realloc-style), using a separate
+ * {@link Arena} per buffer so old allocations can be freed after copy.
+ * The contiguous layout enables fast bulk scoring via direct ordinal offsets.
  */
 public class OffHeapByteVectorStore implements Closeable {
 
-    static final int PAGE_SIZE = 64;
+    private static final Logger logger = LogManager.getLogger(OffHeapByteVectorStore.class);
+    static final int INITIAL_CAPACITY = 64;
 
     private final int dim;
-    private final Arena arena;
-    private final List<MemorySegment> pages;
+    private Arena bufferArena;
+    private MemorySegment buffer;
+    private int capacity;
     private int count;
+    private int resizeCount;
+    private long totalBytesCopied;
 
     public OffHeapByteVectorStore(int dim) {
         this.dim = dim;
-        this.arena = Arena.ofShared();
-        this.pages = new ArrayList<>();
+        this.bufferArena = Arena.ofShared();
+        this.capacity = INITIAL_CAPACITY;
+        this.buffer = bufferArena.allocate((long) capacity * dim);
     }
 
     public void addVector(byte[] vector) {
-        int offsetInPage = count % PAGE_SIZE;
-        if (offsetInPage == 0) {
-            pages.add(arena.allocate((long) PAGE_SIZE * dim));
+        if (count == capacity) {
+            grow();
         }
-        MemorySegment page = pages.getLast();
-        MemorySegment.copy(vector, 0, page, ValueLayout.JAVA_BYTE, (long) offsetInPage * dim, dim);
+        MemorySegment.copy(vector, 0, buffer, ValueLayout.JAVA_BYTE, (long) count * dim, dim);
         count++;
+    }
+
+    private void grow() {
+        int oldCapacity = capacity;
+        int newCapacity = oldCapacity * 2;
+        long bytesToCopy = (long) count * dim;
+
+        Arena newArena = Arena.ofShared();
+        MemorySegment newBuffer = newArena.allocate((long) newCapacity * dim);
+        MemorySegment.copy(buffer, 0, newBuffer, 0, bytesToCopy);
+
+        Arena oldArena = bufferArena;
+        bufferArena = newArena;
+        buffer = newBuffer;
+        capacity = newCapacity;
+        oldArena.close();
+
+        resizeCount++;
+        totalBytesCopied += bytesToCopy;
+        logger.info("resized: [{}] -> [{}] vectors, copied [{}] bytes", oldCapacity, newCapacity, bytesToCopy);
     }
 
     public byte[] getVector(int i) {
@@ -52,7 +76,12 @@ public class OffHeapByteVectorStore implements Closeable {
     }
 
     public MemorySegment getVectorSegment(int i) {
-        return pages.get(i / PAGE_SIZE).asSlice((long) (i % PAGE_SIZE) * dim, dim);
+        return buffer.asSlice((long) i * dim, dim);
+    }
+
+    /** Returns the contiguous buffer backing all stored vectors. */
+    public MemorySegment getBufferSegment() {
+        return buffer;
     }
 
     public int size() {
@@ -61,6 +90,14 @@ public class OffHeapByteVectorStore implements Closeable {
 
     @Override
     public void close() {
-        arena.close();
+        logger.info(
+            "closed: [{}] vectors stored, capacity [{}], [{}] resizes, [{}] bytes allocated, [{}] bytes copied total",
+            count,
+            capacity,
+            resizeCount,
+            (long) capacity * dim,
+            totalBytesCopied
+        );
+        bufferArena.close();
     }
 }
