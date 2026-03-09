@@ -232,3 +232,52 @@ Transposed: each iteration loads exactly 32 bytes (one column = BULK_SIZE), perf
 #### Accumulator overflow handling
 
 Byte-lane popcount produces 0-8 per iteration. Accumulating in byte lanes overflows after 31 iterations (31 x 8 = 248 < 255). For dims=1024, L=128, so the accumulators must be periodically flushed (widened) to 16/32-bit. This is a vertical (lane-wise) add+zero operation, amortized across all 32 vectors simultaneously, and infrequent (~every 31 of L iterations).
+
+### Tiled Layout
+
+For bulk sizes larger than 32, a naive columnar layout causes strided memory access
+(`stride = count` bytes between dimension loads). To keep access sequential regardless
+of bulk size, data is tiled in 32-byte strips:
+
+```
+Strip 0: dim0[doc0..31], dim1[doc0..31], ..., dimL-1[doc0..31]    (L * 32 bytes)
+Strip 1: dim0[doc32..63], dim1[doc32..63], ..., dimL-1[doc32..63] (L * 32 bytes)
+...
+```
+
+Each strip is `L * 32` bytes of sequential memory. The native function loops over
+strips, calling `dotd1q4_vertical_strip` for each one with a pointer to contiguous data.
+
+---
+
+## Benchmark Results
+
+All benchmarks run with `VectorScorerOSQBenchmark.bulkScore`, bits=1, directoryType=MMAP,
+similarityFunction=DOT_PRODUCT. Throughput in ops/ms (higher is better).
+
+### x86 (AMD c8a.xlarge)
+
+| dims | bulkSize | VERTICAL | VECTORIZED | Speedup |
+|------|----------|----------|------------|---------|
+| 768  | 32       | 43.992   | 31.877     | +38%    |
+| 768  | 64       | 23.149   | 17.415     | +33%    |
+| 1024 | 32       | 34.608   | 26.887     | +29%    |
+| 1024 | 64       | 17.966   | 14.010     | +28%    |
+
+### aarch64 (Graviton c8gd.xlarge)
+
+| dims | bulkSize | VERTICAL | VECTORIZED | Speedup |
+|------|----------|----------|------------|---------|
+| 768  | 32       | 25.544   | 24.404     | +5%     |
+| 768  | 64       | 14.441   | 14.123     | +2%     |
+| 1024 | 32       | 20.755   | 20.825     | ~0%     |
+| 1024 | 64       | 11.518   | 11.735     | -2%     |
+
+### Analysis
+
+The vertical layout provides a significant win on x86/AVX2 (+28-38%) because the
+horizontal path requires costly per-vector horizontal reduces across 256-bit registers
+(multiple shuffles + adds per reduce). On aarch64/NEON the gains are negligible because:
+1. NEON registers are 128-bit (half the width), so horizontal reduces are cheaper
+2. NEON has `vaddvq` for single-instruction cross-lane reduction
+3. NEON has native `vcntq_u8` (per-byte popcount), same as the vertical path uses
