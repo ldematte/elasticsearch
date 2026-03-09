@@ -126,7 +126,7 @@ public class VectorScorerTestUtils {
         }
     }
 
-    static final int STRIP_WIDTH = 16;
+    static final int STRIP_WIDTH = 32;
 
     public static void writeBulkOSQVectorDataVertical(
         int bulkSize,
