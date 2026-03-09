@@ -368,6 +368,16 @@ public class Similarities {
         }
     }
 
+    static final MethodHandle DOT_PRODUCT_D1Q4_VERTICAL_BULK = DISTANCE_FUNCS.dotProductD1Q4VerticalBulk();
+
+    public static void dotProductD1Q4VerticalBulk(MemorySegment a, MemorySegment query, int length, int count, MemorySegment scores) {
+        try {
+            DOT_PRODUCT_D1Q4_VERTICAL_BULK.invokeExact(a, query, length, count, scores);
+        } catch (Throwable e) {
+            throw rethrow(e);
+        }
+    }
+
     public static float dotProductF32(MemorySegment a, MemorySegment b, int length) {
         try {
             return (float) DOT_PRODUCT_F32.invokeExact(a, b, length);

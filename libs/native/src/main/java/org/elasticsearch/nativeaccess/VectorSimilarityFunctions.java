@@ -144,4 +144,6 @@ public interface VectorSimilarityFunctions {
     MethodHandle applyCorrectionsMaxInnerProductBulk();
 
     MethodHandle applyCorrectionsDotProductBulk();
+
+    MethodHandle dotProductD1Q4VerticalBulk();
 }

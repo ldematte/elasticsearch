@@ -48,6 +48,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
     static final MethodHandle applyCorrectionsEuclideanBulk$mh;
     static final MethodHandle applyCorrectionsMaxInnerProductBulk$mh;
     static final MethodHandle applyCorrectionsDotProductBulk$mh;
+    static final MethodHandle dotProductD1Q4VerticalBulk$mh;
 
     private static final JdkVectorSimilarityFunctions INSTANCE;
 
@@ -185,6 +186,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
                 applyCorrectionsEuclideanBulk$mh = bindFunction("diskbbq_apply_corrections_euclidean_bulk", caps, score);
                 applyCorrectionsMaxInnerProductBulk$mh = bindFunction("diskbbq_apply_corrections_maximum_inner_product_bulk", caps, score);
                 applyCorrectionsDotProductBulk$mh = bindFunction("diskbbq_apply_corrections_dot_product_bulk", caps, score);
+                dotProductD1Q4VerticalBulk$mh = bindFunction("vec_dotd1q4_vertical_bulk", caps, bulk);
 
                 INSTANCE = new JdkVectorSimilarityFunctions();
             } else {
@@ -197,6 +199,7 @@ public final class JdkVectorLibrary implements VectorLibrary {
                 applyCorrectionsEuclideanBulk$mh = null;
                 applyCorrectionsMaxInnerProductBulk$mh = null;
                 applyCorrectionsDotProductBulk$mh = null;
+                dotProductD1Q4VerticalBulk$mh = null;
                 INSTANCE = null;
             }
         } catch (Throwable t) {
@@ -527,11 +530,29 @@ public final class JdkVectorLibrary implements VectorLibrary {
             }
         }
 
+        private static void dotProductD1Q4VerticalBulk(
+            MemorySegment dataset,
+            MemorySegment query,
+            int datasetVectorLengthInBytes,
+            int count,
+            MemorySegment result
+        ) {
+            Objects.checkFromIndexSize(0L, (long) datasetVectorLengthInBytes * count, dataset.byteSize());
+            Objects.checkFromIndexSize(0L, (long) datasetVectorLengthInBytes * 4, query.byteSize());
+            Objects.checkFromIndexSize(0L, (long) count * Float.BYTES, result.byteSize());
+            try {
+                dotProductD1Q4VerticalBulk$mh.invokeExact(dataset, query, datasetVectorLengthInBytes, count, result);
+            } catch (Throwable t) {
+                throw new AssertionError(t);
+            }
+        }
+
         private static final Map<OperationSignature<?>, MethodHandle> HANDLES_WITH_CHECKS;
 
         static final MethodHandle APPLY_CORRECTIONS_EUCLIDEAN_HANDLE_BULK;
         static final MethodHandle APPLY_CORRECTIONS_MAX_INNER_PRODUCT_HANDLE_BULK;
         static final MethodHandle APPLY_CORRECTIONS_DOT_PRODUCT_HANDLE_BULK;
+        static final MethodHandle DOT_PRODUCT_D1Q4_VERTICAL_BULK_HANDLE;
 
         static {
             MethodHandles.Lookup lookup = MethodHandles.lookup();
@@ -719,6 +740,18 @@ public final class JdkVectorLibrary implements VectorLibrary {
                     "applyCorrectionsDotProductBulk",
                     scoringFunction
                 );
+                DOT_PRODUCT_D1Q4_VERTICAL_BULK_HANDLE = lookup.findStatic(
+                    JdkVectorSimilarityFunctions.class,
+                    "dotProductD1Q4VerticalBulk",
+                    MethodType.methodType(
+                        void.class,
+                        MemorySegment.class,
+                        MemorySegment.class,
+                        int.class,
+                        int.class,
+                        MemorySegment.class
+                    )
+                );
             } catch (ReflectiveOperationException e) {
                 throw new AssertionError(e);
             }
@@ -753,6 +786,11 @@ public final class JdkVectorLibrary implements VectorLibrary {
         @Override
         public MethodHandle applyCorrectionsDotProductBulk() {
             return APPLY_CORRECTIONS_DOT_PRODUCT_HANDLE_BULK;
+        }
+
+        @Override
+        public MethodHandle dotProductD1Q4VerticalBulk() {
+            return DOT_PRODUCT_D1Q4_VERTICAL_BULK_HANDLE;
         }
     }
 }

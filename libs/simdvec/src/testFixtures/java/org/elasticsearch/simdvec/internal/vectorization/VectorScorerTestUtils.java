@@ -126,6 +126,22 @@ public class VectorScorerTestUtils {
         }
     }
 
+    public static void writeBulkOSQVectorDataVertical(
+        int bulkSize,
+        IndexOutput out,
+        VectorScorerTestUtils.OSQVectorData[] vectors,
+        int offset
+    ) throws IOException {
+        int vectorLength = vectors[offset].quantizedVector().length;
+        // Transpose: for each byte position j, write byte j of all bulkSize vectors
+        for (int j = 0; j < vectorLength; j++) {
+            for (int v = 0; v < bulkSize; v++) {
+                out.writeByte(vectors[offset + v].quantizedVector()[j]);
+            }
+        }
+        writeCorrections(vectors, offset, bulkSize, out);
+    }
+
     public static void randomVector(Random random, float[] vector, VectorSimilarityFunction vectorSimilarityFunction) {
         for (int i = 0; i < vector.length; i++) {
             vector[i] = random.nextFloat();

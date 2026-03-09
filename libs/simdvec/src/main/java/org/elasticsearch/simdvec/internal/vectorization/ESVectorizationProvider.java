@@ -51,6 +51,15 @@ public abstract class ESVectorizationProvider {
     ) throws IOException;
 
     /**
+     * Create a new {@link ESNextOSQVectorsScorer} that scores using the vertical (columnar) D1Q4 data layout.
+     * Only supported on JDK 21+ with native access; the base implementation throws.
+     */
+    public ESNextOSQVectorsScorer newD1Q4VerticalOSQVectorsScorer(IndexInput input, int dimension, int dataLength, int bulkSize)
+        throws IOException {
+        throw new UnsupportedOperationException("Vertical D1Q4 scorer requires JDK 21+ with native access");
+    }
+
+    /**
      * Create a new {@link ES92Int7VectorsScorer} for the given {@link IndexInput}.
      * See {@link #newESNextOSQVectorsScorer} for input type requirements.
      */
