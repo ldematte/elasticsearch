@@ -238,7 +238,7 @@ public final class MemorySegmentESNextOSQVectorsScorer extends ESNextOSQVectorsS
                 similarityFunction,
                 centroidDp,
                 scores,
-                BULK_SIZE
+                bulkSize
             );
         }
 
