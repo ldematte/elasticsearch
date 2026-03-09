@@ -1116,8 +1116,8 @@ static inline __m256i byte_popcount_256(const __m256i vec) {
 }
 
 // Scores one 32-wide strip of documents against a 4-bit query using the columnar layout.
-// Uses 16-bit accumulators throughout (no byte drain needed; max value = L*8 fits in 16-bit).
-// Outer loop: dimensions (sequential memory access). Inner: single SIMD register of 32 docs.
+// Uses byte accumulators in the inner loop (1 add_epi8 per bit-plane), draining to
+// 16-bit every 31 iterations to prevent overflow (max popcount per byte = 8, 31*8 = 248 < 255).
 static inline void dotd1q4_vertical_strip(
     const int8_t* a,
     const int8_t* query,
@@ -1127,33 +1127,36 @@ static inline void dotd1q4_vertical_strip(
     f32_t* results
 ) {
     const __m256i zero = _mm256_setzero_si256();
+    const int32_t drain_interval = 31;
 
     __m256i acc_lo0 = zero, acc_hi0 = zero;
     __m256i acc_lo1 = zero, acc_hi1 = zero;
     __m256i acc_lo2 = zero, acc_hi2 = zero;
     __m256i acc_lo3 = zero, acc_hi3 = zero;
 
-    for (int32_t j = 0; j < length; j++) {
-        const __m256i docs = _mm256_loadu_si256(
-            (const __m256i_u*)(a + (int64_t)j * count + strip_offset));
+    for (int32_t j_base = 0; j_base < length; j_base += drain_interval) {
+        const int32_t j_end = (j_base + drain_interval < length) ? j_base + drain_interval : length;
+        __m256i byte_acc0 = zero, byte_acc1 = zero, byte_acc2 = zero, byte_acc3 = zero;
 
-        __m256i popcnt;
+        for (int32_t j = j_base; j < j_end; j++) {
+            const int8_t* doc_ptr = a + (int64_t)j * count + strip_offset;
+            _mm_prefetch((const char*)(doc_ptr + count), _MM_HINT_T0);
+            const __m256i docs = _mm256_loadu_si256((const __m256i_u*)doc_ptr);
 
-        popcnt = byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j])));
-        acc_lo0 = _mm256_add_epi16(acc_lo0, _mm256_unpacklo_epi8(popcnt, zero));
-        acc_hi0 = _mm256_add_epi16(acc_hi0, _mm256_unpackhi_epi8(popcnt, zero));
+            byte_acc0 = _mm256_add_epi8(byte_acc0, byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j]))));
+            byte_acc1 = _mm256_add_epi8(byte_acc1, byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j + length]))));
+            byte_acc2 = _mm256_add_epi8(byte_acc2, byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j + 2 * length]))));
+            byte_acc3 = _mm256_add_epi8(byte_acc3, byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j + 3 * length]))));
+        }
 
-        popcnt = byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j + length])));
-        acc_lo1 = _mm256_add_epi16(acc_lo1, _mm256_unpacklo_epi8(popcnt, zero));
-        acc_hi1 = _mm256_add_epi16(acc_hi1, _mm256_unpackhi_epi8(popcnt, zero));
-
-        popcnt = byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j + 2 * length])));
-        acc_lo2 = _mm256_add_epi16(acc_lo2, _mm256_unpacklo_epi8(popcnt, zero));
-        acc_hi2 = _mm256_add_epi16(acc_hi2, _mm256_unpackhi_epi8(popcnt, zero));
-
-        popcnt = byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j + 3 * length])));
-        acc_lo3 = _mm256_add_epi16(acc_lo3, _mm256_unpacklo_epi8(popcnt, zero));
-        acc_hi3 = _mm256_add_epi16(acc_hi3, _mm256_unpackhi_epi8(popcnt, zero));
+        acc_lo0 = _mm256_add_epi16(acc_lo0, _mm256_unpacklo_epi8(byte_acc0, zero));
+        acc_hi0 = _mm256_add_epi16(acc_hi0, _mm256_unpackhi_epi8(byte_acc0, zero));
+        acc_lo1 = _mm256_add_epi16(acc_lo1, _mm256_unpacklo_epi8(byte_acc1, zero));
+        acc_hi1 = _mm256_add_epi16(acc_hi1, _mm256_unpackhi_epi8(byte_acc1, zero));
+        acc_lo2 = _mm256_add_epi16(acc_lo2, _mm256_unpacklo_epi8(byte_acc2, zero));
+        acc_hi2 = _mm256_add_epi16(acc_hi2, _mm256_unpackhi_epi8(byte_acc2, zero));
+        acc_lo3 = _mm256_add_epi16(acc_lo3, _mm256_unpacklo_epi8(byte_acc3, zero));
+        acc_hi3 = _mm256_add_epi16(acc_hi3, _mm256_unpackhi_epi8(byte_acc3, zero));
     }
 
     // Combine bit-planes: result = plane0 + plane1*2 + plane2*4 + plane3*8
@@ -1167,15 +1170,10 @@ static inline void dotd1q4_vertical_strip(
     result_hi = _mm256_add_epi16(result_hi, _mm256_slli_epi16(acc_hi2, 2));
     result_hi = _mm256_add_epi16(result_hi, _mm256_slli_epi16(acc_hi3, 3));
 
-    // Widen 16-bit to 32-bit, convert to float, store.
-    // unpacklo_epi8 per 128-bit lane maps: lane0 bytes 0..7 -> docs 0..7,
-    //   lane1 bytes 16..23 -> docs 16..23.
-    // unpackhi_epi8: lane0 bytes 8..15 -> docs 8..15,
-    //   lane1 bytes 24..31 -> docs 24..31.
-    __m128i lo_lane0 = _mm256_castsi256_si128(result_lo);       // docs 0..7
-    __m128i hi_lane0 = _mm256_castsi256_si128(result_hi);       // docs 8..15
-    __m128i lo_lane1 = _mm256_extracti128_si256(result_lo, 1);  // docs 16..23
-    __m128i hi_lane1 = _mm256_extracti128_si256(result_hi, 1);  // docs 24..31
+    __m128i lo_lane0 = _mm256_castsi256_si128(result_lo);
+    __m128i hi_lane0 = _mm256_castsi256_si128(result_hi);
+    __m128i lo_lane1 = _mm256_extracti128_si256(result_lo, 1);
+    __m128i hi_lane1 = _mm256_extracti128_si256(result_hi, 1);
 
     _mm256_storeu_ps(results + strip_offset + 0,  _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_lane0)));
     _mm256_storeu_ps(results + strip_offset + 8,  _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_lane0)));

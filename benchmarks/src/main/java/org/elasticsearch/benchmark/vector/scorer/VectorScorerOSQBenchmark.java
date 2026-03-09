@@ -94,7 +94,6 @@ public class VectorScorerOSQBenchmark {
     @Param({ "32" })
     public int bulkSize;
 
-    static final int BULK_SIZE = ESNextOSQVectorsScorer.BULK_SIZE;
     static final int NUM_BULKS = 10;
     static final int NUM_QUERIES = 10;
 
@@ -109,6 +108,7 @@ public class VectorScorerOSQBenchmark {
     IndexInput input;
 
     float[] scratchScores;
+    int numVectors;
 
     record VectorData(
         VectorScorerTestUtils.OSQVectorData[] indexVectors,
@@ -150,13 +150,9 @@ public class VectorScorerOSQBenchmark {
         return new VectorData(indexVectors, queryVectors, binaryIndexLength, VectorUtil.dotProduct(centroid, centroid));
     }
 
-    int activeBulkSize;
-    int numVectors;
-
     @Setup
     public void setup() throws IOException {
-        activeBulkSize = (implementation == VectorImplementation.VERTICAL) ? bulkSize : BULK_SIZE;
-        numVectors = activeBulkSize * NUM_BULKS;
+        numVectors = bulkSize * NUM_BULKS;
         setup(generateRandomVectorData(new Random(123), dims, bits, numVectors, similarityFunction));
     }
 
@@ -172,11 +168,11 @@ public class VectorScorerOSQBenchmark {
         };
 
         try (IndexOutput output = directory.createOutput("vectors", IOContext.DEFAULT)) {
-            for (int i = 0; i < numVectors; i += activeBulkSize) {
+            for (int i = 0; i < numVectors; i += bulkSize) {
                 if (implementation == VectorImplementation.VERTICAL) {
-                    writeBulkOSQVectorDataVertical(activeBulkSize, output, data.indexVectors, i);
+                    writeBulkOSQVectorDataVertical(bulkSize, output, data.indexVectors, i);
                 } else {
-                    writeBulkOSQVectorData(activeBulkSize, output, data.indexVectors, i);
+                    writeBulkOSQVectorData(bulkSize, output, data.indexVectors, i);
                 }
             }
             CodecUtil.writeFooter(output);
@@ -208,13 +204,13 @@ public class VectorScorerOSQBenchmark {
             default -> throw new IllegalArgumentException("Unsupported bits: " + bits);
         };
         scorer = switch (implementation) {
-            case SCALAR -> new ESNextOSQVectorsScorer(input, (byte) queryBits, (byte) docBits, dims, data.binaryIndexLength);
+            case SCALAR -> new ESNextOSQVectorsScorer(input, (byte) queryBits, (byte) docBits, dims, data.binaryIndexLength, bulkSize);
             case VECTORIZED -> ESVectorizationProvider.getInstance()
-                .newESNextOSQVectorsScorer(input, (byte) queryBits, (byte) docBits, dims, data.binaryIndexLength, activeBulkSize);
+                .newESNextOSQVectorsScorer(input, (byte) queryBits, (byte) docBits, dims, data.binaryIndexLength, bulkSize);
             case VERTICAL -> ESVectorizationProvider.getInstance()
-                .newD1Q4VerticalOSQVectorsScorer(input, dims, data.binaryIndexLength, activeBulkSize);
+                .newD1Q4VerticalOSQVectorsScorer(input, dims, data.binaryIndexLength, bulkSize);
         };
-        scratchScores = new float[activeBulkSize];
+        scratchScores = new float[bulkSize];
     }
 
     Path createTempDirectory(String name) throws IOException {
@@ -231,21 +227,21 @@ public class VectorScorerOSQBenchmark {
     public float[] score() throws IOException {
         float[] results = new float[NUM_QUERIES * numVectors];
 
-        float[] lowerIntervals = new float[activeBulkSize];
-        float[] upperIntervals = new float[activeBulkSize];
-        int[] sums = new int[activeBulkSize];
-        float[] additional = new float[activeBulkSize];
+        float[] lowerIntervals = new float[bulkSize];
+        float[] upperIntervals = new float[bulkSize];
+        int[] sums = new int[bulkSize];
+        float[] additional = new float[bulkSize];
 
         for (int j = 0; j < NUM_QUERIES; j++) {
             input.seek(0);
-            for (int i = 0; i < numVectors; i += activeBulkSize) {
-                scorer.quantizeScoreBulk(binaryQueries[j].quantizedVector(), activeBulkSize, scratchScores);
-                input.readFloats(lowerIntervals, 0, activeBulkSize);
-                input.readFloats(upperIntervals, 0, activeBulkSize);
-                input.readInts(sums, 0, activeBulkSize);
-                input.readFloats(additional, 0, activeBulkSize);
+            for (int i = 0; i < numVectors; i += bulkSize) {
+                scorer.quantizeScoreBulk(binaryQueries[j].quantizedVector(), bulkSize, scratchScores);
+                input.readFloats(lowerIntervals, 0, bulkSize);
+                input.readFloats(upperIntervals, 0, bulkSize);
+                input.readInts(sums, 0, bulkSize);
+                input.readFloats(additional, 0, bulkSize);
 
-                for (int b = 0; b < activeBulkSize; b++) {
+                for (int b = 0; b < bulkSize; b++) {
                     float score = scorer.score(
                         binaryQueries[j].lowerInterval(),
                         binaryQueries[j].upperInterval(),
