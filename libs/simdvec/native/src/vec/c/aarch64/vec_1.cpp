@@ -1144,101 +1144,65 @@ EXPORT void vec_dotd4q4_bulk_offsets(
     dotd4q4_inner_bulk<array_mapper>(a, query, length, pitch, offsets, count, results);
 }
 
-// Scores one 32-wide strip of documents against a 4-bit query using the tiled columnar layout.
-// strip_data points to this strip's contiguous tile: dim0[32 bytes], dim1[32 bytes], ...
+// Scores one 16-wide strip of documents against a 4-bit query using the tiled columnar layout.
+// strip_data points to this strip's contiguous tile: dim0[16 bytes], dim1[16 bytes], ...
 // Uses byte accumulators (vcntq_u8 for native popcount), draining to 16-bit every 31 iterations.
-// Two uint8x16_t loads per dimension cover 32 documents.
+// One uint8x16_t load per dimension covers 16 documents (matches NEON register width).
 static inline void dotd1q4_vertical_strip(
     const int8_t* strip_data,
     const int8_t* query,
     const int32_t length,
     f32_t* results
 ) {
-    const int32_t strip_width = 32;
+    const int32_t strip_width = 16;
     const int32_t drain_interval = 31;
 
     const uint8x16_t zero8 = vdupq_n_u8(0);
     const uint16x8_t zero16 = vdupq_n_u16(0);
 
-    // 16-bit drain accumulators: 4 bit-planes x 4 groups of 8 docs
-    uint16x8_t d0_a = zero16, d0_b = zero16, d0_c = zero16, d0_d = zero16;
-    uint16x8_t d1_a = zero16, d1_b = zero16, d1_c = zero16, d1_d = zero16;
-    uint16x8_t d2_a = zero16, d2_b = zero16, d2_c = zero16, d2_d = zero16;
-    uint16x8_t d3_a = zero16, d3_b = zero16, d3_c = zero16, d3_d = zero16;
+    // 16-bit drain accumulators: 4 bit-planes x 2 halves (lo/hi 8 docs)
+    uint16x8_t d0_lo = zero16, d0_hi = zero16;
+    uint16x8_t d1_lo = zero16, d1_hi = zero16;
+    uint16x8_t d2_lo = zero16, d2_hi = zero16;
+    uint16x8_t d3_lo = zero16, d3_hi = zero16;
 
     for (int32_t j_base = 0; j_base < length; j_base += drain_interval) {
         const int32_t j_end = (j_base + drain_interval < length) ? j_base + drain_interval : length;
 
-        uint8x16_t b0_lo = zero8, b0_hi = zero8;
-        uint8x16_t b1_lo = zero8, b1_hi = zero8;
-        uint8x16_t b2_lo = zero8, b2_hi = zero8;
-        uint8x16_t b3_lo = zero8, b3_hi = zero8;
+        uint8x16_t b0 = zero8, b1 = zero8, b2 = zero8, b3 = zero8;
 
         for (int32_t j = j_base; j < j_end; j++) {
             const uint8_t* doc_ptr = (const uint8_t*)(strip_data + (int64_t)j * strip_width);
             __builtin_prefetch(doc_ptr + strip_width, 0, 3);
-            const uint8x16_t docs_lo = vld1q_u8(doc_ptr);
-            const uint8x16_t docs_hi = vld1q_u8(doc_ptr + 16);
+            const uint8x16_t docs = vld1q_u8(doc_ptr);
 
-            uint8x16_t qb;
-
-            qb = vdupq_n_u8((uint8_t)query[j]);
-            b0_lo = vaddq_u8(b0_lo, vcntq_u8(vandq_u8(docs_lo, qb)));
-            b0_hi = vaddq_u8(b0_hi, vcntq_u8(vandq_u8(docs_hi, qb)));
-
-            qb = vdupq_n_u8((uint8_t)query[j + length]);
-            b1_lo = vaddq_u8(b1_lo, vcntq_u8(vandq_u8(docs_lo, qb)));
-            b1_hi = vaddq_u8(b1_hi, vcntq_u8(vandq_u8(docs_hi, qb)));
-
-            qb = vdupq_n_u8((uint8_t)query[j + 2 * length]);
-            b2_lo = vaddq_u8(b2_lo, vcntq_u8(vandq_u8(docs_lo, qb)));
-            b2_hi = vaddq_u8(b2_hi, vcntq_u8(vandq_u8(docs_hi, qb)));
-
-            qb = vdupq_n_u8((uint8_t)query[j + 3 * length]);
-            b3_lo = vaddq_u8(b3_lo, vcntq_u8(vandq_u8(docs_lo, qb)));
-            b3_hi = vaddq_u8(b3_hi, vcntq_u8(vandq_u8(docs_hi, qb)));
+            b0 = vaddq_u8(b0, vcntq_u8(vandq_u8(docs, vdupq_n_u8((uint8_t)query[j]))));
+            b1 = vaddq_u8(b1, vcntq_u8(vandq_u8(docs, vdupq_n_u8((uint8_t)query[j + length]))));
+            b2 = vaddq_u8(b2, vcntq_u8(vandq_u8(docs, vdupq_n_u8((uint8_t)query[j + 2 * length]))));
+            b3 = vaddq_u8(b3, vcntq_u8(vandq_u8(docs, vdupq_n_u8((uint8_t)query[j + 3 * length]))));
         }
 
-        d0_a = vaddq_u16(d0_a, vmovl_u8(vget_low_u8(b0_lo)));
-        d0_b = vaddq_u16(d0_b, vmovl_u8(vget_high_u8(b0_lo)));
-        d0_c = vaddq_u16(d0_c, vmovl_u8(vget_low_u8(b0_hi)));
-        d0_d = vaddq_u16(d0_d, vmovl_u8(vget_high_u8(b0_hi)));
-
-        d1_a = vaddq_u16(d1_a, vmovl_u8(vget_low_u8(b1_lo)));
-        d1_b = vaddq_u16(d1_b, vmovl_u8(vget_high_u8(b1_lo)));
-        d1_c = vaddq_u16(d1_c, vmovl_u8(vget_low_u8(b1_hi)));
-        d1_d = vaddq_u16(d1_d, vmovl_u8(vget_high_u8(b1_hi)));
-
-        d2_a = vaddq_u16(d2_a, vmovl_u8(vget_low_u8(b2_lo)));
-        d2_b = vaddq_u16(d2_b, vmovl_u8(vget_high_u8(b2_lo)));
-        d2_c = vaddq_u16(d2_c, vmovl_u8(vget_low_u8(b2_hi)));
-        d2_d = vaddq_u16(d2_d, vmovl_u8(vget_high_u8(b2_hi)));
-
-        d3_a = vaddq_u16(d3_a, vmovl_u8(vget_low_u8(b3_lo)));
-        d3_b = vaddq_u16(d3_b, vmovl_u8(vget_high_u8(b3_lo)));
-        d3_c = vaddq_u16(d3_c, vmovl_u8(vget_low_u8(b3_hi)));
-        d3_d = vaddq_u16(d3_d, vmovl_u8(vget_high_u8(b3_hi)));
+        d0_lo = vaddq_u16(d0_lo, vmovl_u8(vget_low_u8(b0)));
+        d0_hi = vaddq_u16(d0_hi, vmovl_u8(vget_high_u8(b0)));
+        d1_lo = vaddq_u16(d1_lo, vmovl_u8(vget_low_u8(b1)));
+        d1_hi = vaddq_u16(d1_hi, vmovl_u8(vget_high_u8(b1)));
+        d2_lo = vaddq_u16(d2_lo, vmovl_u8(vget_low_u8(b2)));
+        d2_hi = vaddq_u16(d2_hi, vmovl_u8(vget_high_u8(b2)));
+        d3_lo = vaddq_u16(d3_lo, vmovl_u8(vget_low_u8(b3)));
+        d3_hi = vaddq_u16(d3_hi, vmovl_u8(vget_high_u8(b3)));
     }
 
     // Combine bit-planes: result = plane0 + plane1*2 + plane2*4 + plane3*8
-    uint16x8_t r_a = vaddq_u16(d0_a, vaddq_u16(vshlq_n_u16(d1_a, 1),
-                     vaddq_u16(vshlq_n_u16(d2_a, 2), vshlq_n_u16(d3_a, 3))));
-    uint16x8_t r_b = vaddq_u16(d0_b, vaddq_u16(vshlq_n_u16(d1_b, 1),
-                     vaddq_u16(vshlq_n_u16(d2_b, 2), vshlq_n_u16(d3_b, 3))));
-    uint16x8_t r_c = vaddq_u16(d0_c, vaddq_u16(vshlq_n_u16(d1_c, 1),
-                     vaddq_u16(vshlq_n_u16(d2_c, 2), vshlq_n_u16(d3_c, 3))));
-    uint16x8_t r_d = vaddq_u16(d0_d, vaddq_u16(vshlq_n_u16(d1_d, 1),
-                     vaddq_u16(vshlq_n_u16(d2_d, 2), vshlq_n_u16(d3_d, 3))));
+    uint16x8_t r_lo = vaddq_u16(d0_lo, vaddq_u16(vshlq_n_u16(d1_lo, 1),
+                      vaddq_u16(vshlq_n_u16(d2_lo, 2), vshlq_n_u16(d3_lo, 3))));
+    uint16x8_t r_hi = vaddq_u16(d0_hi, vaddq_u16(vshlq_n_u16(d1_hi, 1),
+                      vaddq_u16(vshlq_n_u16(d2_hi, 2), vshlq_n_u16(d3_hi, 3))));
 
     // Widen u16 -> u32 -> f32, store 4 floats at a time
-    vst1q_f32(results + 0,  vcvtq_f32_u32(vmovl_u16(vget_low_u16(r_a))));
-    vst1q_f32(results + 4,  vcvtq_f32_u32(vmovl_u16(vget_high_u16(r_a))));
-    vst1q_f32(results + 8,  vcvtq_f32_u32(vmovl_u16(vget_low_u16(r_b))));
-    vst1q_f32(results + 12, vcvtq_f32_u32(vmovl_u16(vget_high_u16(r_b))));
-    vst1q_f32(results + 16, vcvtq_f32_u32(vmovl_u16(vget_low_u16(r_c))));
-    vst1q_f32(results + 20, vcvtq_f32_u32(vmovl_u16(vget_high_u16(r_c))));
-    vst1q_f32(results + 24, vcvtq_f32_u32(vmovl_u16(vget_low_u16(r_d))));
-    vst1q_f32(results + 28, vcvtq_f32_u32(vmovl_u16(vget_high_u16(r_d))));
+    vst1q_f32(results + 0,  vcvtq_f32_u32(vmovl_u16(vget_low_u16(r_lo))));
+    vst1q_f32(results + 4,  vcvtq_f32_u32(vmovl_u16(vget_high_u16(r_lo))));
+    vst1q_f32(results + 8,  vcvtq_f32_u32(vmovl_u16(vget_low_u16(r_hi))));
+    vst1q_f32(results + 12, vcvtq_f32_u32(vmovl_u16(vget_high_u16(r_hi))));
 }
 
 EXPORT void vec_dotd1q4_vertical_bulk(
@@ -1248,7 +1212,7 @@ EXPORT void vec_dotd1q4_vertical_bulk(
     const int32_t count,
     f32_t* results
 ) {
-    const int32_t strip_width = 32;
+    const int32_t strip_width = 16;
     const int32_t full_strips = count / strip_width;
     const int64_t strip_data_size = (int64_t)length * strip_width;
 
@@ -1256,7 +1220,7 @@ EXPORT void vec_dotd1q4_vertical_bulk(
         dotd1q4_vertical_strip(a + s * strip_data_size, query, length, results + s * strip_width);
     }
 
-    // Scalar tail for remaining documents (count not a multiple of 32)
+    // Scalar tail for remaining documents (count not a multiple of 16)
     const int32_t tail_start = full_strips * strip_width;
     const int32_t tail_count = count - tail_start;
     const int8_t* tail_data = a + full_strips * strip_data_size;
