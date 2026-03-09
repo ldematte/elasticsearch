@@ -1115,19 +1115,18 @@ static inline __m256i byte_popcount_256(const __m256i vec) {
                            _mm256_shuffle_epi8(lookup, hi));
 }
 
-// Scores one 32-wide strip of documents against a 4-bit query using the columnar layout.
-// Uses byte accumulators in the inner loop (1 add_epi8 per bit-plane), draining to
-// 16-bit every 31 iterations to prevent overflow (max popcount per byte = 8, 31*8 = 248 < 255).
+// Scores one 32-wide strip of documents against a 4-bit query using the tiled columnar layout.
+// strip_data points to this strip's contiguous tile: dim0[32 bytes], dim1[32 bytes], ...
+// Uses byte accumulators in the inner loop, draining to 16-bit every 31 iterations.
 static inline void dotd1q4_vertical_strip(
-    const int8_t* a,
+    const int8_t* strip_data,
     const int8_t* query,
     const int32_t length,
-    const int32_t count,
-    const int32_t strip_offset,
     f32_t* results
 ) {
     const __m256i zero = _mm256_setzero_si256();
     const int32_t drain_interval = 31;
+    const int32_t strip_width = 32;
 
     __m256i acc_lo0 = zero, acc_hi0 = zero;
     __m256i acc_lo1 = zero, acc_hi1 = zero;
@@ -1139,8 +1138,8 @@ static inline void dotd1q4_vertical_strip(
         __m256i byte_acc0 = zero, byte_acc1 = zero, byte_acc2 = zero, byte_acc3 = zero;
 
         for (int32_t j = j_base; j < j_end; j++) {
-            const int8_t* doc_ptr = a + (int64_t)j * count + strip_offset;
-            _mm_prefetch((const char*)(doc_ptr + count), _MM_HINT_T0);
+            const int8_t* doc_ptr = strip_data + (int64_t)j * strip_width;
+            _mm_prefetch((const char*)(doc_ptr + strip_width), _MM_HINT_T0);
             const __m256i docs = _mm256_loadu_si256((const __m256i_u*)doc_ptr);
 
             byte_acc0 = _mm256_add_epi8(byte_acc0, byte_popcount_256(_mm256_and_si256(docs, _mm256_set1_epi8(query[j]))));
@@ -1175,10 +1174,10 @@ static inline void dotd1q4_vertical_strip(
     __m128i lo_lane1 = _mm256_extracti128_si256(result_lo, 1);
     __m128i hi_lane1 = _mm256_extracti128_si256(result_hi, 1);
 
-    _mm256_storeu_ps(results + strip_offset + 0,  _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_lane0)));
-    _mm256_storeu_ps(results + strip_offset + 8,  _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_lane0)));
-    _mm256_storeu_ps(results + strip_offset + 16, _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_lane1)));
-    _mm256_storeu_ps(results + strip_offset + 24, _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_lane1)));
+    _mm256_storeu_ps(results + 0,  _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_lane0)));
+    _mm256_storeu_ps(results + 8,  _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_lane0)));
+    _mm256_storeu_ps(results + 16, _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(lo_lane1)));
+    _mm256_storeu_ps(results + 24, _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(hi_lane1)));
 }
 
 EXPORT void vec_dotd1q4_vertical_bulk(
@@ -1189,22 +1188,26 @@ EXPORT void vec_dotd1q4_vertical_bulk(
     f32_t* results
 ) {
     const int32_t strip_width = 32;
-    const int32_t full_strips_end = count & ~(strip_width - 1);
+    const int32_t full_strips = count / strip_width;
+    const int64_t strip_data_size = (int64_t)length * strip_width;
 
-    for (int32_t strip = 0; strip < full_strips_end; strip += strip_width) {
-        dotd1q4_vertical_strip(a, query, length, count, strip, results);
+    for (int32_t s = 0; s < full_strips; s++) {
+        dotd1q4_vertical_strip(a + s * strip_data_size, query, length, results + s * strip_width);
     }
 
     // Scalar tail for remaining documents (count not a multiple of 32)
-    for (int32_t d = full_strips_end; d < count; d++) {
+    const int32_t tail_start = full_strips * strip_width;
+    const int32_t tail_count = count - tail_start;
+    const int8_t* tail_data = a + full_strips * strip_data_size;
+    for (int32_t d = 0; d < tail_count; d++) {
         int64_t s0 = 0, s1 = 0, s2 = 0, s3 = 0;
         for (int32_t j = 0; j < length; j++) {
-            uint8_t doc_byte = (uint8_t)a[(int64_t)j * count + d];
+            uint8_t doc_byte = (uint8_t)tail_data[(int64_t)j * tail_count + d];
             s0 += __builtin_popcount(doc_byte & (uint8_t)query[j]);
             s1 += __builtin_popcount(doc_byte & (uint8_t)query[j + length]);
             s2 += __builtin_popcount(doc_byte & (uint8_t)query[j + 2 * length]);
             s3 += __builtin_popcount(doc_byte & (uint8_t)query[j + 3 * length]);
         }
-        results[d] = (f32_t)(s0 + (s1 << 1) + (s2 << 2) + (s3 << 3));
+        results[tail_start + d] = (f32_t)(s0 + (s1 << 1) + (s2 << 2) + (s3 << 3));
     }
 }

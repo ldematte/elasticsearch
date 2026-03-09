@@ -126,6 +126,8 @@ public class VectorScorerTestUtils {
         }
     }
 
+    static final int STRIP_WIDTH = 32;
+
     public static void writeBulkOSQVectorDataVertical(
         int bulkSize,
         IndexOutput out,
@@ -133,12 +135,27 @@ public class VectorScorerTestUtils {
         int offset
     ) throws IOException {
         int vectorLength = vectors[offset].quantizedVector().length;
-        // Transpose: for each byte position j, write byte j of all bulkSize vectors
-        for (int j = 0; j < vectorLength; j++) {
-            for (int v = 0; v < bulkSize; v++) {
-                out.writeByte(vectors[offset + v].quantizedVector()[j]);
+        int fullStrips = bulkSize / STRIP_WIDTH;
+        int tail = bulkSize % STRIP_WIDTH;
+
+        for (int s = 0; s < fullStrips; s++) {
+            int stripStart = s * STRIP_WIDTH;
+            for (int j = 0; j < vectorLength; j++) {
+                for (int v = 0; v < STRIP_WIDTH; v++) {
+                    out.writeByte(vectors[offset + stripStart + v].quantizedVector()[j]);
+                }
             }
         }
+
+        if (tail > 0) {
+            int tailStart = fullStrips * STRIP_WIDTH;
+            for (int j = 0; j < vectorLength; j++) {
+                for (int v = 0; v < tail; v++) {
+                    out.writeByte(vectors[offset + tailStart + v].quantizedVector()[j]);
+                }
+            }
+        }
+
         writeCorrections(vectors, offset, bulkSize, out);
     }
 
