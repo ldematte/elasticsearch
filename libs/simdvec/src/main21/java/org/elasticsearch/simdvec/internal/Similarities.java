@@ -191,7 +191,7 @@ public class Similarities {
         }
     }
 
-    static void dotProductI4Bulk(MemorySegment a, MemorySegment b, int packedLen, int count, MemorySegment scores) {
+    public static void dotProductI4Bulk(MemorySegment a, MemorySegment b, int packedLen, int count, MemorySegment scores) {
         try {
             DOT_PRODUCT_I4_BULK.invokeExact(a, b, packedLen, count, scores);
         } catch (Throwable e) {
@@ -199,7 +199,7 @@ public class Similarities {
         }
     }
 
-    static void dotProductI4BulkWithOffsets(
+    public static void dotProductI4BulkWithOffsets(
         MemorySegment a,
         MemorySegment b,
         int packedLen,

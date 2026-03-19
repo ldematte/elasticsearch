@@ -219,6 +219,57 @@ public class VectorScorerTestUtils {
         }
     }
 
+    public static OSQVectorData createOSQIndexDataInt4(
+        float[] values,
+        float[] centroid,
+        OptimizedScalarQuantizer quantizer,
+        int dimensions
+    ) {
+        final float[] residualScratch = new float[dimensions];
+        final int[] scratch = new int[dimensions];
+
+        OptimizedScalarQuantizer.QuantizationResult result = quantizer.scalarQuantize(values, residualScratch, scratch, (byte) 4, centroid);
+
+        int packedLen = dimensions / 2;
+        byte[] packed = new byte[packedLen];
+        for (int i = 0; i < packedLen; i++) {
+            packed[i] = (byte) ((scratch[i] << 4) | (scratch[i + packedLen] & 0x0F));
+        }
+
+        return new OSQVectorData(
+            packed,
+            result.lowerInterval(),
+            result.upperInterval(),
+            result.additionalCorrection(),
+            result.quantizedComponentSum()
+        );
+    }
+
+    public static OSQVectorData createOSQQueryDataInt4(
+        float[] query,
+        float[] centroid,
+        OptimizedScalarQuantizer quantizer,
+        int dimensions
+    ) {
+        final float[] residualScratch = new float[dimensions];
+        final int[] scratch = new int[dimensions];
+
+        OptimizedScalarQuantizer.QuantizationResult result = quantizer.scalarQuantize(query, residualScratch, scratch, (byte) 4, centroid);
+
+        byte[] unpacked = new byte[dimensions];
+        for (int i = 0; i < dimensions; i++) {
+            unpacked[i] = (byte) scratch[i];
+        }
+
+        return new OSQVectorData(
+            unpacked,
+            result.lowerInterval(),
+            result.upperInterval(),
+            result.additionalCorrection(),
+            result.quantizedComponentSum()
+        );
+    }
+
     public static void randomVector(Random random, float[] vector, VectorSimilarityFunction vectorSimilarityFunction) {
         for (int i = 0; i < vector.length; i++) {
             vector[i] = random.nextFloat();

@@ -29,8 +29,8 @@ import java.nio.ByteOrder;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 import static org.apache.lucene.index.VectorSimilarityFunction.MAXIMUM_INNER_PRODUCT;
 import static org.elasticsearch.simdvec.internal.Similarities.dotProductD4Q4;
-import static org.elasticsearch.simdvec.internal.Similarities.dotProductD4Q4Bulk;
-import static org.elasticsearch.simdvec.internal.Similarities.dotProductD4Q4BulkWithOffsets;
+import static org.elasticsearch.simdvec.internal.Similarities.dotProductI4Bulk;
+import static org.elasticsearch.simdvec.internal.Similarities.dotProductI4BulkWithOffsets;
 
 /** Panamized scorer for quantized vectors stored as a {@link MemorySegment}. */
 final class MSInt4SymmetricESNextOSQVectorsScorer extends MemorySegmentESNextOSQVectorsScorer.MemorySegmentScorer {
@@ -41,7 +41,6 @@ final class MSInt4SymmetricESNextOSQVectorsScorer extends MemorySegmentESNextOSQ
 
     @Override
     public long quantizeScore(byte[] q) throws IOException {
-        assert q.length == length;
         // 128 / 8 == 16
         if (length >= 16) {
             if (NATIVE_SUPPORTED) {
@@ -232,7 +231,6 @@ final class MSInt4SymmetricESNextOSQVectorsScorer extends MemorySegmentESNextOSQ
 
     @Override
     public boolean quantizeScoreBulk(byte[] q, int count, float[] scores) throws IOException {
-        assert q.length == length;
         // 128 / 8 == 16
         if (length >= 16) {
             if (NATIVE_SUPPORTED) {
@@ -267,7 +265,7 @@ final class MSInt4SymmetricESNextOSQVectorsScorer extends MemorySegmentESNextOSQ
     private void nativeQuantizeScoreBulk(MemorySegment queryMemorySegment, int count, MemorySegment scoresSegment) throws IOException {
         var datasetLengthInBytes = (long) length * count;
         IndexInputUtils.withSlice(in, datasetLengthInBytes, this::getScratch, datasetSegment -> {
-            dotProductD4Q4Bulk(datasetSegment, queryMemorySegment, length, count, scoresSegment);
+            dotProductI4Bulk(datasetSegment, queryMemorySegment, length, count, scoresSegment);
             return null;
         });
     }
@@ -286,7 +284,6 @@ final class MSInt4SymmetricESNextOSQVectorsScorer extends MemorySegmentESNextOSQ
 
     @Override
     public boolean quantizeScoreBulkOffsets(byte[] q, int[] offsets, int offsetsCount, float[] scores, int count) throws IOException {
-        assert q.length == length;
         if (NATIVE_SUPPORTED) {
             if (SUPPORTS_HEAP_SEGMENTS) {
                 var querySegment = MemorySegment.ofArray(q);
@@ -319,7 +316,7 @@ final class MSInt4SymmetricESNextOSQVectorsScorer extends MemorySegmentESNextOSQ
     ) throws IOException {
         var datasetLengthInBytes = (long) length * totalCount;
         IndexInputUtils.withSlice(in, datasetLengthInBytes, this::getScratch, datasetSegment -> {
-            dotProductD4Q4BulkWithOffsets(datasetSegment, querySegment, length, length, offsetsSegment, offsetsCount, scoresSegment);
+            dotProductI4BulkWithOffsets(datasetSegment, querySegment, length, length, offsetsSegment, offsetsCount, scoresSegment);
             return null;
         });
     }
@@ -336,7 +333,6 @@ final class MSInt4SymmetricESNextOSQVectorsScorer extends MemorySegmentESNextOSQ
         float[] scores,
         int bulkSize
     ) throws IOException {
-        assert q.length == length;
         // 128 / 8 == 16
         if (length >= 16) {
             if (PanamaESVectorUtilSupport.HAS_FAST_INTEGER_VECTORS) {
