@@ -182,6 +182,62 @@ public class VectorScorerTestUtils {
         );
     }
 
+    public static OSQVectorData createOSQIndexDataInt2(
+        float[] values,
+        float[] centroid,
+        OptimizedScalarQuantizer quantizer,
+        int dimensions
+    ) {
+        final float[] residualScratch = new float[dimensions];
+        final int[] scratch = new int[dimensions];
+
+        OptimizedScalarQuantizer.QuantizationResult result = quantizer.scalarQuantize(values, residualScratch, scratch, (byte) 2, centroid);
+
+        int packedLen = dimensions / 4;
+        byte[] packed = new byte[packedLen];
+        for (int i = 0; i < packedLen; i++) {
+            packed[i] = (byte) ((scratch[4 * i] & 0x03) | ((scratch[4 * i + 1] & 0x03) << 2) | ((scratch[4 * i + 2] & 0x03) << 4)
+                | ((scratch[4 * i + 3] & 0x03) << 6));
+        }
+
+        return new OSQVectorData(
+            packed,
+            result.lowerInterval(),
+            result.upperInterval(),
+            result.additionalCorrection(),
+            result.quantizedComponentSum()
+        );
+    }
+
+    public static OSQVectorData createOSQQueryDataInt2(
+        float[] query,
+        float[] centroid,
+        OptimizedScalarQuantizer quantizer,
+        int dimensions
+    ) {
+        final float[] residualScratch = new float[dimensions];
+        final int[] scratch = new int[dimensions];
+
+        OptimizedScalarQuantizer.QuantizationResult result = quantizer.scalarQuantize(query, residualScratch, scratch, (byte) 4, centroid);
+
+        int packedLen = dimensions / 4;
+        byte[] layered = new byte[4 * packedLen];
+        for (int i = 0; i < packedLen; i++) {
+            layered[i] = (byte) scratch[4 * i];
+            layered[i + packedLen] = (byte) scratch[4 * i + 1];
+            layered[i + 2 * packedLen] = (byte) scratch[4 * i + 2];
+            layered[i + 3 * packedLen] = (byte) scratch[4 * i + 3];
+        }
+
+        return new OSQVectorData(
+            layered,
+            result.lowerInterval(),
+            result.upperInterval(),
+            result.additionalCorrection(),
+            result.quantizedComponentSum()
+        );
+    }
+
     public static void writeSingleOSQVectorData(IndexOutput out, OSQVectorData vectorData) throws IOException {
         out.writeBytes(vectorData.quantizedVector(), 0, vectorData.quantizedVector().length);
         out.writeInt(Float.floatToIntBits(vectorData.lowerInterval()));

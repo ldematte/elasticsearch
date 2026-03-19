@@ -900,13 +900,45 @@ static inline void dotd2q4_inner_bulk(
     const int32_t count,
     f32_t* results
 ) {
+    // Packed 2-bit multiply-accumulate: each doc byte holds 4 crumbs (2-bit values),
+    // query is laid out as 4 layers of `length` bytes at offsets 0, length, 2*length, 3*length.
+    const uint8x16_t mask_crumb = vdupq_n_u8(0x03);
+    constexpr int stride = sizeof(uint8x16_t);
+    const int blk = length & ~(stride - 1);
+
     int c = 0;
-    const int bit_length = length/2;
     for (; c < count; c++) {
-        const int8_t* a0 = a + mapper(c, offsets) * pitch;
-        int64_t lower = dotd1q4_inner(a0, query, bit_length);
-        int64_t upper = dotd1q4_inner(a0 + bit_length, query, bit_length);
-        results[c] = (f32_t)(lower + (upper << 1));
+        const uint8_t* doc = (const uint8_t*)(a + mapper(c, offsets) * pitch);
+        uint32x4_t acc0 = vdupq_n_u32(0);
+        uint32x4_t acc1 = vdupq_n_u32(0);
+        uint32x4_t acc2 = vdupq_n_u32(0);
+        uint32x4_t acc3 = vdupq_n_u32(0);
+
+        int i = 0;
+        for (; i < blk; i += stride) {
+            uint8x16_t d = vld1q_u8(doc + i);
+            uint8x16_t layer0 = vandq_u8(d, mask_crumb);
+            uint8x16_t layer1 = vandq_u8(vshrq_n_u8(d, 2), mask_crumb);
+            uint8x16_t layer2 = vandq_u8(vshrq_n_u8(d, 4), mask_crumb);
+            uint8x16_t layer3 = vshrq_n_u8(d, 6);
+
+            acc0 = vdotq_u32(acc0, layer0, vld1q_u8((const uint8_t*)(query + i)));
+            acc1 = vdotq_u32(acc1, layer1, vld1q_u8((const uint8_t*)(query + i + length)));
+            acc2 = vdotq_u32(acc2, layer2, vld1q_u8((const uint8_t*)(query + i + 2 * length)));
+            acc3 = vdotq_u32(acc3, layer3, vld1q_u8((const uint8_t*)(query + i + 3 * length)));
+        }
+
+        int32_t total = (int32_t)vaddvq_u32(vaddq_u32(vaddq_u32(acc0, acc1), vaddq_u32(acc2, acc3)));
+
+        for (; i < length; i++) {
+            uint8_t db = doc[i];
+            total += (db & 0x03) * (uint8_t)query[i];
+            total += ((db >> 2) & 0x03) * (uint8_t)query[i + length];
+            total += ((db >> 4) & 0x03) * (uint8_t)query[i + 2 * length];
+            total += (db >> 6) * (uint8_t)query[i + 3 * length];
+        }
+
+        results[c] = (f32_t)total;
     }
 }
 

@@ -889,42 +889,52 @@ static inline void dotd2q4_inner_bulk(
     const int32_t count,
     f32_t* results
 ) {
-    const int lines_to_fetch = length / CACHE_LINE_SIZE + 1;
-    const int bit_length = length/2;
+    // Packed 2-bit multiply-accumulate: each doc byte holds 4 crumbs (2-bit values),
+    // query is laid out as 4 layers of `length` bytes at offsets 0, length, 2*length, 3*length.
+    const __m256i mask_crumb = _mm256_set1_epi8(0x03);
+    const __m256i ones = _mm256_set1_epi16(1);
+    constexpr int stride = sizeof(__m256i);
+    const int blk = length & ~(stride - 1);
+
     int c = 0;
-
-    const int8_t* a0 = safe_mapper_offset<int8_t, 0, mapper>(a, pitch, offsets, count);
-    const int8_t* a1 = safe_mapper_offset<int8_t, 1, mapper>(a, pitch, offsets, count);
-
-    // Process 2 vectors at a time, after instructing the CPU to
-    // prefetch the next vectors (both stripes).
-    for (; c + 2 < count; c+=2) {
-        const int8_t* next_a0 = a + mapper(c + 2, offsets) * pitch;
-        const int8_t* next_a1 = a + mapper(c + 3, offsets) * pitch;
-
-        prefetch(next_a0, lines_to_fetch);
-        prefetch(next_a0 + bit_length, lines_to_fetch);
-        prefetch(next_a1, lines_to_fetch);
-        prefetch(next_a1 + bit_length, lines_to_fetch);
-
-        int64_t lower0 = dotd1q4_inner(a0, query, bit_length);
-        int64_t upper0 = dotd1q4_inner(a0 + bit_length, query, bit_length);
-        int64_t lower1 = dotd1q4_inner(a1, query, bit_length);
-        int64_t upper1 = dotd1q4_inner(a1 + bit_length, query, bit_length);
-
-        results[c] = (f32_t)(lower0 + (upper0 << 1));
-        results[c + 1] = (f32_t)(lower1 + (upper1 << 1));
-
-        a0 = next_a0;
-        a1 = next_a1;
-    }
-
-    // Tail-handling: remaining vectors
     for (; c < count; c++) {
-        const int8_t* a0 = a + mapper(c, offsets) * pitch;
-        int64_t lower = dotd1q4_inner(a0, query, bit_length);
-        int64_t upper = dotd1q4_inner(a0 + bit_length, query, bit_length);
-        results[c] = (f32_t)(lower + (upper << 1));
+        const int8_t* doc = a + mapper(c, offsets) * pitch;
+        __m256i acc0 = _mm256_setzero_si256();
+        __m256i acc1 = _mm256_setzero_si256();
+        __m256i acc2 = _mm256_setzero_si256();
+        __m256i acc3 = _mm256_setzero_si256();
+
+        int i = 0;
+        for (; i < blk; i += stride) {
+            __m256i d = _mm256_loadu_si256((const __m256i*)(doc + i));
+            __m256i layer0 = _mm256_and_si256(d, mask_crumb);
+            __m256i layer1 = _mm256_and_si256(_mm256_srli_epi16(d, 2), mask_crumb);
+            __m256i layer2 = _mm256_and_si256(_mm256_srli_epi16(d, 4), mask_crumb);
+            __m256i layer3 = _mm256_and_si256(_mm256_srli_epi16(d, 6), mask_crumb);
+
+            __m256i q0 = _mm256_loadu_si256((const __m256i*)(query + i));
+            __m256i q1 = _mm256_loadu_si256((const __m256i*)(query + i + length));
+            __m256i q2 = _mm256_loadu_si256((const __m256i*)(query + i + 2 * length));
+            __m256i q3 = _mm256_loadu_si256((const __m256i*)(query + i + 3 * length));
+
+            acc0 = _mm256_add_epi32(acc0, _mm256_madd_epi16(ones, _mm256_maddubs_epi16(layer0, q0)));
+            acc1 = _mm256_add_epi32(acc1, _mm256_madd_epi16(ones, _mm256_maddubs_epi16(layer1, q1)));
+            acc2 = _mm256_add_epi32(acc2, _mm256_madd_epi16(ones, _mm256_maddubs_epi16(layer2, q2)));
+            acc3 = _mm256_add_epi32(acc3, _mm256_madd_epi16(ones, _mm256_maddubs_epi16(layer3, q3)));
+        }
+
+        int32_t total = mm256_reduce_epi32<_mm_add_epi32>(
+            _mm256_add_epi32(_mm256_add_epi32(acc0, acc1), _mm256_add_epi32(acc2, acc3)));
+
+        for (; i < length; i++) {
+            uint8_t db = (uint8_t)doc[i];
+            total += (db & 0x03) * (uint8_t)query[i];
+            total += ((db >> 2) & 0x03) * (uint8_t)query[i + length];
+            total += ((db >> 4) & 0x03) * (uint8_t)query[i + 2 * length];
+            total += (db >> 6) * (uint8_t)query[i + 3 * length];
+        }
+
+        results[c] = (f32_t)total;
     }
 }
 

@@ -228,7 +228,6 @@ final class MSDibitToInt4ESNextOSQVectorsScorer extends MemorySegmentESNextOSQVe
 
     @Override
     public boolean quantizeScoreBulk(byte[] q, int count, float[] scores) throws IOException {
-        assert q.length == length * 2;
         // 128 / 8 == 16
         if (length >= 16) {
             if (NATIVE_SUPPORTED) {
@@ -281,7 +280,6 @@ final class MSDibitToInt4ESNextOSQVectorsScorer extends MemorySegmentESNextOSQVe
 
     @Override
     public boolean quantizeScoreBulkOffsets(byte[] q, int[] offsets, int offsetsCount, float[] scores, int count) throws IOException {
-        assert q.length == length * 2;
         if (NATIVE_SUPPORTED) {
             if (SUPPORTS_HEAP_SEGMENTS) {
                 var querySegment = MemorySegment.ofArray(q);
@@ -331,7 +329,6 @@ final class MSDibitToInt4ESNextOSQVectorsScorer extends MemorySegmentESNextOSQVe
         float[] scores,
         int bulkSize
     ) throws IOException {
-        assert q.length == length * 2;
         // 128 / 8 == 16
         if (length >= 16) {
             if (PanamaESVectorUtilSupport.HAS_FAST_INTEGER_VECTORS) {

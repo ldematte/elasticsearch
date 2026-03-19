@@ -112,15 +112,12 @@ public class ESNextOSQVectorsScorer {
     }
 
     private long quantized4BitScore2BitIndex(byte[] q) throws IOException {
-        assert q.length == length * 2;
-        assert length % 2 == 0 : "length must be even for 2-bit index length: " + length + " dimensions: " + dimensions;
         int lower = (int) quantized4BitScore(q, length / 2);
         int upper = (int) quantized4BitScore(q, length / 2);
         return lower + ((long) upper << 1);
     }
 
     private long quantized4BitScore(byte[] q, int length) throws IOException {
-        assert q.length == length * 4;
         final int size = length;
         long subRet0 = 0;
         long subRet1 = 0;

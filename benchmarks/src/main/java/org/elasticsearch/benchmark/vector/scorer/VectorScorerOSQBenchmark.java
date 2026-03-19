@@ -44,7 +44,9 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestUtils.createOSQIndexData;
+import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestUtils.createOSQIndexDataInt2;
 import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestUtils.createOSQQueryData;
+import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestUtils.createOSQQueryDataInt2;
 import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestUtils.randomVector;
 import static org.elasticsearch.simdvec.internal.vectorization.VectorScorerTestUtils.writeBulkOSQVectorData;
 
@@ -74,19 +76,19 @@ public class VectorScorerOSQBenchmark {
         VECTORIZED
     }
 
-    @Param({ "384", "768", "1024" })
+    @Param("768")
     public int dims;
 
-    @Param({ "1", "2", "4", "7" })
+    @Param("2")
     public byte bits;
 
-    @Param
+    @Param("VECTORIZED")
     public VectorImplementation implementation;
 
-    @Param
+    @Param("MMAP")
     public DirectoryType directoryType;
 
-    @Param
+    @Param("DOT_PRODUCT")
     public VectorSimilarityFunction similarityFunction;
 
     static final int BULK_SIZE = ESNextOSQVectorsScorer.BULK_SIZE;
@@ -122,7 +124,7 @@ public class VectorScorerOSQBenchmark {
     ) {}
 
     static VectorData generateRandomVectorData(Random random, int dims, byte bits, VectorSimilarityFunction similarityFunction) {
-        int binaryIndexLength = ESNextDiskBBQVectorsFormat.QuantEncoding.fromBits(bits).getDocPackedLength(dims);
+        int binaryIndexLength = bits == 2 ? dims / 4 : ESNextDiskBBQVectorsFormat.QuantEncoding.fromBits(bits).getDocPackedLength(dims);
 
         final float[] centroid = new float[dims];
         randomVector(random, centroid, similarityFunction);
@@ -133,16 +135,22 @@ public class VectorScorerOSQBenchmark {
         for (int i = 0; i < VectorScorerOSQBenchmark.NUM_VECTORS; i++) {
             var vector = new float[dims];
             randomVector(random, vector, similarityFunction);
-            indexVectors[i] = createOSQIndexData(vector, centroid, quantizer, dims, bits, binaryIndexLength);
+            indexVectors[i] = bits == 2
+                ? createOSQIndexDataInt2(vector, centroid, quantizer, dims)
+                : createOSQIndexData(vector, centroid, quantizer, dims, bits, binaryIndexLength);
         }
 
-        int binaryQueryLength = ESNextDiskBBQVectorsFormat.QuantEncoding.fromBits(bits).getQueryPackedLength(dims);
-        byte queryBits = bits == 7 ? (byte) 7 : (byte) 4;
         VectorScorerTestUtils.OSQVectorData[] queryVectors = new VectorScorerTestUtils.OSQVectorData[VectorScorerOSQBenchmark.NUM_VECTORS];
         var query = new float[dims];
         for (int i = 0; i < VectorScorerOSQBenchmark.NUM_VECTORS; i++) {
             randomVector(random, query, similarityFunction);
-            queryVectors[i] = createOSQQueryData(query, centroid, quantizer, dims, queryBits, binaryQueryLength);
+            if (bits == 2) {
+                queryVectors[i] = createOSQQueryDataInt2(query, centroid, quantizer, dims);
+            } else {
+                int binaryQueryLength = ESNextDiskBBQVectorsFormat.QuantEncoding.fromBits(bits).getQueryPackedLength(dims);
+                byte queryBits = bits == 7 ? (byte) 7 : (byte) 4;
+                queryVectors[i] = createOSQQueryData(query, centroid, quantizer, dims, queryBits, binaryQueryLength);
+            }
         }
 
         var denseOffsetsCount = BULK_SIZE - 3;
