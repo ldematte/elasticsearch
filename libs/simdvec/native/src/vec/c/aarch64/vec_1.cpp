@@ -290,19 +290,22 @@ static inline void call_i8_bulk(
 ) {
     constexpr int stride = sizeof(int8x16_t);
     const int blk = dims & ~(stride - 1);
+    const int lines_to_fetch = dims / CACHE_LINE_SIZE + 1;
+    constexpr int lookahead = 3; // prefetch this many rounds ahead
     int c = 0;
 
-    // Prefetch the first cache line of every vector in this bulk call.
-    // This gives the memory subsystem maximum lead time to start fetching
-    // from DRAM, while the interleaved compute loop provides the actual
-    // memory-level parallelism for subsequent cache lines.
-    for (int p = 0; p < count; p++) {
-        const int8_t* ptr = mapper(a, p, offsets, pitch);
-        __builtin_prefetch(ptr);
-    }
-
     // Process <batches> vectors at a time with interleaved loads.
+    // Prefetch vectors `lookahead` rounds ahead to give DRAM time to respond.
     for (; c + batches - 1 < count; c += batches) {
+        // Prefetch vectors that are `lookahead` batches ahead
+        const int prefetch_base = c + lookahead * batches;
+        if (prefetch_base + batches - 1 < count) {
+            apply_indexed<batches>([&](auto I) {
+                const int8_t* ptr = mapper(a, prefetch_base + I, offsets, pitch);
+                prefetch(ptr, lines_to_fetch);
+            });
+        }
+
         const int8_t* as[batches];
         TAcc acc[batches];
         apply_indexed<batches>([&](auto I) {
