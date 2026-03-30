@@ -288,40 +288,59 @@ static inline void call_i8_bulk(
     const int32_t count,
     f32_t* results
 ) {
-    const int lines_to_fetch = dims / CACHE_LINE_SIZE + 1;
+    constexpr int stride = sizeof(int8x16_t);
+    const int blk = dims & ~(stride - 1);
     int c = 0;
 
-    // Pointers to the current batch of input vectors, resolved via mapper.
-    const int8_t* current_vecs[batches];
-    init_pointers<batches, TData, int8_t, mapper>(current_vecs, a, pitch, offsets, 0, count);
+    // Prefetch the first cache line of every vector in this bulk call.
+    // This gives the memory subsystem maximum lead time to start fetching
+    // from DRAM, while the interleaved compute loop provides the actual
+    // memory-level parallelism for subsequent cache lines.
+    for (int p = 0; p < count; p++) {
+        const int8_t* ptr = mapper(a, p, offsets, pitch);
+        __builtin_prefetch(ptr);
+    }
 
-    // Process a batch of `batches` vectors at a time, after instructing the
-    // CPU to prefetch the next batch. Each vector is fully computed before
-    // moving to the next — this gives the prefetch for the next batch time
-    // to complete while we stream through the current vectors sequentially.
+    // Process <batches> vectors at a time with interleaved loads.
     for (; c + batches - 1 < count; c += batches) {
-        const int8_t* next_vecs[batches];
-        const bool has_next = c + 2 * batches - 1 < count;
-        if (has_next) {
+        const int8_t* as[batches];
+        TAcc acc[batches];
+        apply_indexed<batches>([&](auto I) {
+            as[I] = mapper(a, c + I, offsets, pitch);
+            acc[I] = acc_ops<TAcc>::zero();
+        });
+
+        int i = 0;
+        for (; i < blk; i += stride) {
+            int8x16_t vb = vld1q_s8(b + i);
+
             apply_indexed<batches>([&](auto I) {
-                next_vecs[I] = mapper(a, c + batches + I, offsets, pitch);
-                prefetch(next_vecs[I], lines_to_fetch);
+                int8x16_t va = vld1q_s8(as[I] + i);
+                acc[I] = inner_op(acc[I], va, vb);
+            });
+        }
+
+        int32_t res[batches];
+        apply_indexed<batches>([&](auto I) {
+            res[I] = acc_ops<TAcc>::reduce(acc[I]);
+        });
+        // scalar tail
+        for (; i < dims; i++) {
+            const int8_t bb = b[i];
+            apply_indexed<batches>([&](auto I) {
+                res[I] += scalar_op(as[I][i], bb);
             });
         }
 
         apply_indexed<batches>([&](auto I) {
-            results[c + I] = bulk_tail(current_vecs[I], b, dims);
+            results[c + I] = (f32_t)res[I];
         });
-
-        if (has_next) {
-            std::copy_n(next_vecs, batches, current_vecs);
-        }
     }
 
     // Tail-handling: remaining vectors
     for (; c < count; c++) {
         const int8_t* a0 = mapper(a, c, offsets, pitch);
-        results[c] = bulk_tail(a0, b, dims);
+        results[c] = (f32_t)bulk_tail(a0, b, dims);
     }
 }
 
