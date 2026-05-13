@@ -21,9 +21,14 @@
 package org.elasticsearch.index.codec.vectors.es93;
 
 import org.apache.lucene.codecs.hnsw.FlatFieldVectorsWriter;
+import org.apache.lucene.index.ByteVectorValues;
 import org.apache.lucene.index.DocsWithFieldSet;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FloatVectorValues;
+import org.apache.lucene.index.KnnVectorValues;
+import org.apache.lucene.index.VectorEncoding;
 import org.apache.lucene.util.RamUsageEstimator;
+import org.elasticsearch.simdvec.HasOffHeapVectorStore;
 import org.elasticsearch.simdvec.OffHeapByteVectorStore;
 import org.elasticsearch.simdvec.OffHeapFloatVectorStore;
 import org.elasticsearch.simdvec.WrappedNativeByteVectors;
@@ -132,6 +137,18 @@ abstract class ES93FlatFieldVectorsWriter<T> extends FlatFieldVectorsWriter<T> {
             .getVectorEncoding().byteSize;
     }
 
+    /**
+     * Returns a {@link KnnVectorValues} view that also implements {@link HasOffHeapVectorStore}, so
+     * downstream scorer factories can obtain the native-backed store directly via {@code instanceof}.
+     */
+    @Override
+    public KnnVectorValues asKnnVectorValues(VectorEncoding encoding, int dim) throws IOException {
+        return switch (encoding) {
+            case FLOAT32 -> new OffHeapFloatVectorValues(((FloatWriter) this).store, dim);
+            case BYTE -> new OffHeapByteVectorValues(((ByteWriter) this).store, dim);
+        };
+    }
+
     static final class FloatWriter extends ES93FlatFieldVectorsWriter<float[]> {
         final OffHeapFloatVectorStore store;
 
@@ -205,4 +222,87 @@ abstract class ES93FlatFieldVectorsWriter<T> extends FlatFieldVectorsWriter<T> {
         }
     }
 
+    /** {@link FloatVectorValues} view backed by an off-heap store. */
+    private static final class OffHeapFloatVectorValues extends FloatVectorValues
+        implements HasOffHeapVectorStore<OffHeapFloatVectorStore> {
+        private final OffHeapFloatVectorStore store;
+        private final int dim;
+
+        OffHeapFloatVectorValues(OffHeapFloatVectorStore store, int dim) {
+            this.store = store;
+            this.dim = dim;
+        }
+
+        @Override
+        public int dimension() {
+            return dim;
+        }
+
+        @Override
+        public int size() {
+            return store.size();
+        }
+
+        @Override
+        public float[] vectorValue(int ord) {
+            return store.getVector(ord);
+        }
+
+        @Override
+        public FloatVectorValues copy() {
+            return this;
+        }
+
+        @Override
+        public DocIndexIterator iterator() {
+            return createDenseIterator();
+        }
+
+        @Override
+        public OffHeapFloatVectorStore offHeapStore() {
+            return store;
+        }
+    }
+
+    /** {@link ByteVectorValues} view backed by an off-heap store. */
+    private static final class OffHeapByteVectorValues extends ByteVectorValues
+        implements HasOffHeapVectorStore<OffHeapByteVectorStore> {
+        private final OffHeapByteVectorStore store;
+        private final int dim;
+
+        OffHeapByteVectorValues(OffHeapByteVectorStore store, int dim) {
+            this.store = store;
+            this.dim = dim;
+        }
+
+        @Override
+        public int dimension() {
+            return dim;
+        }
+
+        @Override
+        public int size() {
+            return store.size();
+        }
+
+        @Override
+        public byte[] vectorValue(int ord) {
+            return store.getVector(ord);
+        }
+
+        @Override
+        public ByteVectorValues copy() {
+            return this;
+        }
+
+        @Override
+        public DocIndexIterator iterator() {
+            return createDenseIterator();
+        }
+
+        @Override
+        public OffHeapByteVectorStore offHeapStore() {
+            return store;
+        }
+    }
 }

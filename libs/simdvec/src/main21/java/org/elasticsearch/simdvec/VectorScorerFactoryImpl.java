@@ -15,7 +15,6 @@ import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.store.FilterIndexInput;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.MemorySegmentAccessInput;
-import org.apache.lucene.util.SuppressForbidden;
 import org.apache.lucene.util.hnsw.RandomVectorScorer;
 import org.apache.lucene.util.hnsw.RandomVectorScorerSupplier;
 import org.apache.lucene.util.quantization.QuantizedByteVectorValues;
@@ -203,54 +202,6 @@ final class VectorScorerFactoryImpl implements VectorScorerFactory {
         }
     }
 
-    // -- Reflection helpers --
-
-    /**
-     * Attempts to extract an {@link OffHeapFloatVectorStore} from a {@link FloatVectorValues}
-     * created by {@code FloatVectorValues.fromFloats(list, dim)}. The anonymous class captures
-     * the list as a synthetic field; we use reflection to access it.
-     */
-    @SuppressForbidden(reason = "we need reflection to access the vector store")
-    static OffHeapFloatVectorStore extractOffHeapFloatStore(FloatVectorValues values) {
-        for (var field : values.getClass().getDeclaredFields()) {
-            if (java.util.List.class.isAssignableFrom(field.getType())) {
-                try {
-                    field.setAccessible(true);
-                    Object list = field.get(values);
-                    if (list instanceof WrappedNativeFloatVectors wrapper) {
-                        return wrapper.getStore();
-                    }
-                } catch (IllegalAccessException e) {
-                    return null;
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Attempts to extract an {@link OffHeapByteVectorStore} from a {@link ByteVectorValues}
-     * created by {@code ByteVectorValues.fromBytes(list, dim)}. The anonymous class captures
-     * the list as a synthetic field; we use reflection to access it.
-     */
-    @SuppressForbidden(reason = "we need reflection to access the vector store")
-    static OffHeapByteVectorStore extractOffHeapByteStore(ByteVectorValues values) {
-        for (var field : values.getClass().getDeclaredFields()) {
-            if (java.util.List.class.isAssignableFrom(field.getType())) {
-                try {
-                    field.setAccessible(true);
-                    Object list = field.get(values);
-                    if (list instanceof WrappedNativeByteVectors wrapper) {
-                        return wrapper.getStore();
-                    }
-                } catch (IllegalAccessException e) {
-                    return null;
-                }
-            }
-        }
-        return null;
-    }
-
     // -- Supplier creation --
 
     @Override
@@ -268,9 +219,8 @@ final class VectorScorerFactoryImpl implements VectorScorerFactory {
             var adapter = new FloatMemorySegmentAccessInputAdapter(msInput, values.dimension());
             return createFloatScorerSupplier(similarityType, values, adapter);
         }
-        OffHeapFloatVectorStore offHeapStore = extractOffHeapFloatStore(values);
-        if (offHeapStore != null) {
-            var adapter = new OffHeapFloatStoreAdapter(offHeapStore);
+        if (values instanceof HasOffHeapVectorStore<?> off && off.offHeapStore() instanceof OffHeapFloatVectorStore store) {
+            var adapter = new OffHeapFloatStoreAdapter(store);
             return createFloatScorerSupplier(similarityType, values, adapter);
         }
         if (SUPPORTS_HEAP_SEGMENTS) {
@@ -307,9 +257,8 @@ final class VectorScorerFactoryImpl implements VectorScorerFactory {
             var adapter = new ByteMemorySegmentAccessInputAdapter(msInput, values.dimension());
             return createByteScorerSupplier(similarityType, values, adapter);
         }
-        OffHeapByteVectorStore offHeapStore = extractOffHeapByteStore(values);
-        if (offHeapStore != null) {
-            var adapter = new OffHeapByteStoreAdapter(offHeapStore);
+        if (values instanceof HasOffHeapVectorStore<?> off && off.offHeapStore() instanceof OffHeapByteVectorStore store) {
+            var adapter = new OffHeapByteStoreAdapter(store);
             return createByteScorerSupplier(similarityType, values, adapter);
         }
         if (SUPPORTS_HEAP_SEGMENTS) {
