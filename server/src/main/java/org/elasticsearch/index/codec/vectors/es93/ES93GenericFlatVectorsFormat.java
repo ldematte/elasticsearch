@@ -12,6 +12,7 @@ package org.elasticsearch.index.codec.vectors.es93;
 import org.apache.lucene.codecs.hnsw.FlatVectorsReader;
 import org.apache.lucene.codecs.hnsw.FlatVectorsScorer;
 import org.apache.lucene.codecs.hnsw.FlatVectorsWriter;
+import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsWriter;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.elasticsearch.index.codec.vectors.AbstractFlatVectorsFormat;
@@ -44,7 +45,24 @@ public class ES93GenericFlatVectorsFormat extends AbstractFlatVectorsFormat {
 
     private static final DirectIOCapableFlatVectorsFormat defaultVectorFormat = new DirectIOCapableLucene99FlatVectorsFormat(
         ES93GenericFlatVectorScorer.INSTANCE
-    );
+    ) {
+        /**
+         * Overrides the default 2-arg {@code Lucene99FlatVectorsWriter} with the 3-arg form
+         * (Lucene PR #16053), injecting {@link ES93FlatFieldVectorsWriter#create} as the per-field
+         * writer factory. This causes vectors to be accumulated off-heap during HNSW graph
+         * construction, enabling native bulk-sparse scoring via
+         * {@link ES93GenericFlatVectorScorer} without reflection or VarHandle field-stealing.
+         *
+         * <p>This override is intentionally scoped to {@code defaultVectorFormat} (FLOAT32 and BYTE)
+         * only. The four DiskBBQ formats and the bit format share the same
+         * {@link DirectIOCapableLucene99FlatVectorsFormat} base but are separate instances, so they
+         * continue using Lucene's default on-heap field writer unchanged.
+         */
+        @Override
+        public FlatVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
+            return new Lucene99FlatVectorsWriter(state, flatVectorsScorer(), ES93FlatFieldVectorsWriter::create);
+        }
+    };
     private static final DirectIOCapableFlatVectorsFormat bitVectorFormat = new DirectIOCapableLucene99FlatVectorsFormat(
         ES93FlatBitVectorScorer.INSTANCE
     ) {

@@ -41,7 +41,7 @@ public final class IndexInputUtils {
      * Returns {@code true} if {@code MemorySegment} slices can be obtained from the specified {@link IndexInput}.
      */
     public static boolean canUseSegmentSlices(IndexInput input) {
-        return input instanceof MemorySegmentAccessInput || input instanceof DirectAccessInput;
+        return input instanceof MemorySegmentAccessInput || input instanceof DirectAccessInput || input instanceof OffHeapVectorData;
     }
 
     /**
@@ -91,6 +91,15 @@ public final class IndexInputUtils {
             });
             if (available) {
                 return result[0];
+            }
+        }
+        if (in instanceof OffHeapVectorData ov) {
+            long offset = in.getFilePointer();
+            in.skipBytes(length);
+            try {
+                return ov.withSlice(offset, length, action);
+            } finally {
+                Reference.reachabilityFence(in);
             }
         }
         return copyAndApply(in, Math.toIntExact(length), scratchSupplier, action);
@@ -150,13 +159,12 @@ public final class IndexInputUtils {
         MemorySegment addrs = addressesBufferSupplier.apply(count);
         assert addrs.byteSize() >= (long) count * ValueLayout.ADDRESS.byteSize()
             : "address buffer too small: " + addrs.byteSize() + " < " + ((long) count * ValueLayout.ADDRESS.byteSize());
-        if (in instanceof MemorySegmentAccessInput msai) {
-            return resolveFromMmap(msai, offsets, length, count, addrs, action);
-        }
-        if (in instanceof DirectAccessInput dai) {
-            return resolveFromDirectAccess(dai, offsets, length, count, addrs, action);
-        }
-        return false;
+        return switch (in) {
+            case MemorySegmentAccessInput msai -> resolveFromMmap(msai, offsets, length, count, addrs, action);
+            case DirectAccessInput dai -> resolveFromDirectAccess(dai, offsets, length, count, addrs, action);
+            case OffHeapVectorData ov -> resolveFromOffHeap(ov, in, offsets, length, count, addrs, action);
+            default -> false;
+        };
     }
 
     private static boolean resolveFromMmap(
@@ -208,6 +216,27 @@ public final class IndexInputUtils {
                 Reference.reachabilityFence(segments);
             }
         });
+    }
+
+    private static boolean resolveFromOffHeap(
+        OffHeapVectorData ov,
+        IndexInput in,
+        long[] offsets,
+        int length,
+        int count,
+        MemorySegment addrs,
+        CheckedConsumer<MemorySegment, IOException> action
+    ) throws IOException {
+        ov.sliceAddresses(offsets, length, count, addrs);
+        assert validateAddresses(addrs, count);
+        try {
+            action.accept(addrs);
+        } finally {
+            // We are responsible for fencing on the OffHeapVectorData instance,
+            // to prevent the backing arena from being collected mid-native-call
+            Reference.reachabilityFence(in);
+        }
+        return true;
     }
 
     private static boolean validateInputs(IndexInput in, long[] offsets, int length, int count) {
