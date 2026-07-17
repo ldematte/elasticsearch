@@ -10,7 +10,8 @@ package org.elasticsearch.simdvec;
 
 import org.apache.lucene.codecs.lucene95.HasIndexSlice;
 import org.apache.lucene.store.IndexInput;
-import org.elasticsearch.core.CheckedFunction;
+import org.elasticsearch.core.CheckedConsumer;
+import org.elasticsearch.core.DirectAccessInput;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -23,11 +24,14 @@ import java.util.function.IntSupplier;
 /**
  * A read-only {@link IndexInput} view over an off-heap native vector store.
  *
- * <p>The {@link IndexInput} is backed by an {@link OffHeapVectorData}, which exposes a logical space
+ * <p>The {@link IndexInput} is backed by an {@link OffHeapVectorStore}, which exposes a logical space
  * of {@code [0, count * vectorByteSize)}, where {@code count} can grow (e.g. as vectors are appended).
  * Each vector occupies {@code [ord * vectorByteSize, (ord+1) * vectorByteSize)} bytes in this logical space.
+ *
+ * <p>Implements {@link DirectAccessInput} using arithmetic over the store's page list, providing
+ * zero-per-call-allocation slice resolution.
  */
-public final class OffHeapVectorInput extends IndexInput implements HasIndexSlice, OffHeapVectorData {
+public final class OffHeapVectorInput extends IndexInput implements HasIndexSlice, DirectAccessInput {
 
     private final List<MemorySegment> pages;
     private final Arena arena;
@@ -128,34 +132,44 @@ public final class OffHeapVectorInput extends IndexInput implements HasIndexSlic
     }
 
     /**
-     * Resolves {@code count} byte offsets to raw native addresses with zero per-call allocation.
-     * Each offset is mapped to its page via {@code off / pageBytes} and the pageOffset-page position via
-     * {@code off % pageBytes}; the page's base address is read once via {@link MemorySegment#address()}.
-     *
-     * <p>The caller in {@link IndexInputUtils#withSliceAddresses} is responsible for fencing on
-     * this input after the native call to prevent the arena from being collected mid-flight.
+     * Returns a read-only view of the {@code length} bytes at {@code offset}, passing it to {@code action}.
+     * Always returns {@code true} (the backing arena is always live for the lifetime of this input).
      */
     @Override
-    public void sliceAddresses(long[] offsets, int length, int count, MemorySegment addrsOut) {
+    public boolean withMemorySegmentSlice(long offset, long length, CheckedConsumer<MemorySegment, IOException> action) throws IOException {
+        int pageIdx = (int) (offset / pageBytes);
+        long pageOffset = offset % pageBytes;
+        action.accept(pages.get(pageIdx).asSlice(pageOffset, length).asReadOnly());
+        return true;
+    }
+
+    /**
+     * Resolves {@code count} byte offsets to raw native addresses with zero per-call allocation,
+     * then invokes {@code action} with the populated {@code addrsOut} buffer. Always returns
+     * {@code true} (the backing arena is always live).
+     *
+     * <p>Each offset is mapped to its page via {@code off / pageBytes}. The caller is
+     * responsible for fencing on this input after the native call to prevent the arena from being
+     * collected mid-flight.
+     */
+    @Override
+    public boolean withSliceAddresses(
+        long[] offsets,
+        int length,
+        int count,
+        MemorySegment addrsOut,
+        CheckedConsumer<MemorySegment, IOException> action
+    ) throws IOException {
+        assert ValueLayout.ADDRESS.byteSize() == Long.BYTES;
         for (int i = 0; i < count; i++) {
             long off = offsets[i];
             int pageIdx = (int) (off / pageBytes);
             long pageOffset = off % pageBytes;
             assert pageOffset + length <= pageBytes
                 : "vector straddles a page boundary (off=" + off + ", len=" + length + ", pageBytes=" + pageBytes + ")";
-            long addr = pages.get(pageIdx).address() + pageOffset;
-            assert ValueLayout.ADDRESS.byteSize() == Long.BYTES;
-            addrsOut.setAtIndex(ValueLayout.JAVA_LONG, i, addr);
+            addrsOut.setAtIndex(ValueLayout.JAVA_LONG, i, pages.get(pageIdx).address() + pageOffset);
         }
-    }
-
-    /**
-     * Executes {@code action} on a read-only view of one vector's bytes from the appropriate page.
-     */
-    @Override
-    public <R> R withSlice(long offset, long length, CheckedFunction<MemorySegment, R, IOException> action) throws IOException {
-        int pageIdx = (int) (offset / pageBytes);
-        long pageOffset = offset % pageBytes;
-        return action.apply(pages.get(pageIdx).asSlice(pageOffset, length).asReadOnly());
+        action.accept(addrsOut);
+        return true;
     }
 }

@@ -42,11 +42,8 @@ import java.util.List;
  * {@code IOFunction<FieldInfo, FlatFieldVectorsWriter<?>>} passed to the 3-arg
  * {@code Lucene99FlatVectorsWriter} constructor.
  */
-abstract sealed class ES93FlatFieldVectorsWriter<T> extends FlatFieldVectorsWriter<T>
-    implements
-        Closeable
-    permits ES93FlatFieldVectorsWriter.Float,
-    ES93FlatFieldVectorsWriter.Byte {
+abstract sealed class ES93FlatFieldVectorsWriter<T> extends FlatFieldVectorsWriter<T> implements Closeable permits
+    ES93FlatFieldVectorsWriter.Float, ES93FlatFieldVectorsWriter.Byte {
 
     /** Releases the off-heap store. */
     @Override
@@ -91,9 +88,7 @@ abstract sealed class ES93FlatFieldVectorsWriter<T> extends FlatFieldVectorsWrit
             }
             if (docID == lastDocID) {
                 throw new IllegalArgumentException(
-                    "VectorValuesField \""
-                        + fieldName
-                        + "\" appears more than once in this document (only one value is allowed per field)"
+                    "VectorValuesField \"" + fieldName + "\" appears more than once in this document (only one value is allowed per field)"
                 );
             }
             assert docID > lastDocID;
@@ -195,9 +190,7 @@ abstract sealed class ES93FlatFieldVectorsWriter<T> extends FlatFieldVectorsWrit
             }
             if (docID == lastDocID) {
                 throw new IllegalArgumentException(
-                    "VectorValuesField \""
-                        + fieldName
-                        + "\" appears more than once in this document (only one value is allowed per field)"
+                    "VectorValuesField \"" + fieldName + "\" appears more than once in this document (only one value is allowed per field)"
                 );
             }
             assert docID > lastDocID;
