@@ -47,11 +47,9 @@ public class ES93GenericFlatVectorsFormat extends AbstractFlatVectorsFormat {
         ES93GenericFlatVectorScorer.INSTANCE
     ) {
         /**
-         * Overrides the default 2-arg {@code Lucene99FlatVectorsWriter} with the 3-arg form
-         * (Lucene PR #16053), injecting {@link ES93FlatFieldVectorsWriter#create} as the per-field
+         * Injects {@link ES93FlatFieldVectorsWriter#create} as the per-field
          * writer factory. This causes vectors to be accumulated off-heap during HNSW graph
-         * construction, enabling native bulk-sparse scoring via
-         * {@link ES93GenericFlatVectorScorer} without reflection or VarHandle field-stealing.
+         * construction, enabling native bulk-sparse scoring via {@link ES93GenericFlatVectorScorer}.
          *
          * <p>This override is intentionally scoped to {@code defaultVectorFormat} (FLOAT32 and BYTE)
          * only. The four DiskBBQ formats and the bit format share the same
