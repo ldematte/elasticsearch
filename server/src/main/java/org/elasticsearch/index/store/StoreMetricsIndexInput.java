@@ -16,7 +16,7 @@ import org.apache.lucene.store.MemorySegmentAccessInput;
 import org.apache.lucene.store.RandomAccessInput;
 import org.elasticsearch.core.CheckedConsumer;
 import org.elasticsearch.core.DirectAccessInput;
-import org.elasticsearch.simdvec.MemorySegmentAccessInputAccess;
+import org.elasticsearch.lucene.store.MemorySegmentAccessInputAccess;
 
 import java.io.IOException;
 import java.lang.foreign.MemorySegment;
@@ -104,11 +104,11 @@ public class StoreMetricsIndexInput extends FilterIndexInput implements DirectAc
         long[] offsets,
         int length,
         int count,
-        MemorySegment addrsOut,
+        MemorySegment addressesScratch,
         CheckedConsumer<MemorySegment, IOException> action
     ) throws IOException {
         if (in instanceof DirectAccessInput dai) {
-            return dai.withSliceAddresses(offsets, length, count, addrsOut, action);
+            return dai.withSliceAddresses(offsets, length, count, addressesScratch, action);
         }
         return false;
     }
