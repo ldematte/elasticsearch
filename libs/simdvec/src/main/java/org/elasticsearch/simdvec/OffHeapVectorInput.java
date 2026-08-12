@@ -137,6 +137,7 @@ public final class OffHeapVectorInput extends IndexInput implements HasIndexSlic
      */
     @Override
     public boolean withMemorySegmentSlice(long offset, long length, CheckedConsumer<MemorySegment, IOException> action) throws IOException {
+        assert arena.scope().isAlive();
         int pageIdx = (int) (offset / pageBytes);
         long pageOffset = offset % pageBytes;
         action.accept(pages.get(pageIdx).asSlice(pageOffset, length).asReadOnly());
@@ -161,6 +162,7 @@ public final class OffHeapVectorInput extends IndexInput implements HasIndexSlic
         CheckedConsumer<MemorySegment, IOException> action
     ) throws IOException {
         assert ValueLayout.ADDRESS.byteSize() == Long.BYTES;
+        assert arena.scope().isAlive();
         for (int i = 0; i < count; i++) {
             long off = offsets[i];
             int pageIdx = (int) (off / pageBytes);

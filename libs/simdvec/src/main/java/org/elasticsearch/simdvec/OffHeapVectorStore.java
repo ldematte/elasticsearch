@@ -76,7 +76,6 @@ public final class OffHeapVectorStore<T> implements Closeable {
         this.vectorByteSize = dims * (int) elementLayout.byteSize();
         this.pageBytes = VECTORS_PER_PAGE * vectorByteSize;
         this.arena = Arena.ofShared();
-        allocatePage();
     }
 
     private void allocatePage() {
@@ -93,7 +92,7 @@ public final class OffHeapVectorStore<T> implements Closeable {
      */
     public void append(T vector) {
         assert Array.getLength(vector) == dims : "expected " + dims + " elements, got " + Array.getLength(vector);
-        if (currentPageCount == VECTORS_PER_PAGE) {
+        if (currentPage == null || currentPageCount == VECTORS_PER_PAGE) {
             allocatePage();
         }
         long pageOffset = (long) currentPageCount * vectorByteSize;
@@ -123,12 +122,12 @@ public final class OffHeapVectorStore<T> implements Closeable {
     }
 
     /**
-     * Returns the number of bytes currently allocated in native memory by this store.
-     * This is {@code size() * vectorByteSize}, i.e. the actual data footprint across all pages.
-     * Rounded up to full pages internally, but only the occupied portion is reported here.
+     * Returns the number of bytes committed to native memory by this store: whole pages, including the
+     * unused tail of the last one. Callers use this for flush accounting, which has to reflect memory
+     * actually held rather than memory occupied by data.
      */
     public long nativeBytes() {
-        return (long) count * vectorByteSize;
+        return (long) pages.size() * pageBytes;
     }
 
     /** Returns the number of elements per vector. */
@@ -156,9 +155,15 @@ public final class OffHeapVectorStore<T> implements Closeable {
         );
     }
 
-    /** Closes the backing arena, releasing all native memory. Must be called after flush. */
+    /**
+     * Closes the backing arena, releasing all native memory. Every {@link OffHeapVectorInput} view handed
+     * out by {@link #asIndexInput()} becomes unusable, as does anything that read addresses out of one;
+     * the views detect this and throw, but scorers built on top of them must already have been discarded.
+     */
     @Override
     public void close() {
-        arena.close();
+        if (arena.scope().isAlive()) {
+            arena.close();
+        }
     }
 }

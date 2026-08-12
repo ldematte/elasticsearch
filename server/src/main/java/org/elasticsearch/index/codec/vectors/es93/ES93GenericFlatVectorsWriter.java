@@ -106,8 +106,13 @@ class ES93GenericFlatVectorsWriter extends FlatVectorsWriter {
 
     @Override
     public void close() throws IOException {
-        IOUtils.close(metaOut, rawVectorWriter);
-        IOUtils.close(fieldWriters);
+        // We must do a single IOUtils.close, so in case a close() fails, it closes everything before rethrowing.
+        // metaOut can be null: this is safe for both ArrayList and IOUtils.close
+        List<Closeable> toClose = new ArrayList<>(fieldWriters.size() + 2);
+        toClose.add(metaOut);
+        toClose.add(rawVectorWriter);
+        toClose.addAll(fieldWriters);
+        IOUtils.close(toClose);
     }
 
     @Override

@@ -45,22 +45,26 @@ public class ES93GenericFlatVectorsFormat extends AbstractFlatVectorsFormat {
 
     private static final DirectIOCapableFlatVectorsFormat defaultVectorFormat = new DirectIOCapableLucene99FlatVectorsFormat(
         ES93GenericFlatVectorScorer.INSTANCE
+    );
+
+    /**
+     * A write-side-only variant of {@link #defaultVectorFormat} that buffers vectors in native memory
+     * ({@link ES93FlatFieldVectorsWriter}) instead of an on-heap list, making them addressable as an
+     * {@code IndexInput} so that {@link ES93GenericFlatVectorScorer} can pick a native scorer.
+     *
+     * <p>It produces the same files as {@link #defaultVectorFormat} and deliberately inherits its
+     * {@code getName()}, which is written into the {@code .vfi} meta and used by the read side to
+     * resolve the format. It therefore must not be added to {@link #supportedFormats}.
+     */
+    private static final DirectIOCapableFlatVectorsFormat offHeapBufferedDefaultVectorFormat = new DirectIOCapableLucene99FlatVectorsFormat(
+        ES93GenericFlatVectorScorer.INSTANCE
     ) {
-        /**
-         * Injects {@link ES93FlatFieldVectorsWriter#create} as the per-field
-         * writer factory. This causes vectors to be accumulated off-heap during HNSW graph
-         * construction, enabling native bulk-sparse scoring via {@link ES93GenericFlatVectorScorer}.
-         *
-         * <p>This override is intentionally scoped to {@code defaultVectorFormat} (FLOAT32 and BYTE)
-         * only. The four DiskBBQ formats and the bit format share the same
-         * {@link DirectIOCapableLucene99FlatVectorsFormat} base but are separate instances, so they
-         * continue using Lucene's default on-heap field writer unchanged.
-         */
         @Override
         public FlatVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
             return new Lucene99FlatVectorsWriter(state, flatVectorsScorer(), ES93FlatFieldVectorsWriter::create);
         }
     };
+
     private static final DirectIOCapableFlatVectorsFormat bitVectorFormat = new DirectIOCapableLucene99FlatVectorsFormat(
         ES93FlatBitVectorScorer.INSTANCE
     ) {
@@ -90,9 +94,19 @@ public class ES93GenericFlatVectorsFormat extends AbstractFlatVectorsFormat {
     }
 
     public ES93GenericFlatVectorsFormat(DenseVectorFieldMapper.ElementType elementType, boolean useDirectIO) {
+        this(elementType, useDirectIO, false);
+    }
+
+    /**
+     * @param offHeapBuffering buffer FLOAT32 and BYTE vectors in native memory while the segment is written,
+     *                         see {@link #offHeapBufferedDefaultVectorFormat}. Requires that each buffered
+     *                         vector is read at most once, and never mutated in place, by the enclosing
+     *                         format's write path. Ignored for BIT and BFLOAT16.
+     */
+    public ES93GenericFlatVectorsFormat(DenseVectorFieldMapper.ElementType elementType, boolean useDirectIO, boolean offHeapBuffering) {
         super(NAME);
         writeFormat = switch (elementType) {
-            case FLOAT, BYTE -> defaultVectorFormat;
+            case FLOAT, BYTE -> offHeapBuffering ? offHeapBufferedDefaultVectorFormat : defaultVectorFormat;
             case BIT -> bitVectorFormat;
             case BFLOAT16 -> bfloat16VectorFormat;
         };
