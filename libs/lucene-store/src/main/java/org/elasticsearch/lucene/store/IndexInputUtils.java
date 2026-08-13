@@ -77,23 +77,62 @@ public final class IndexInputUtils {
             long offset = in.getFilePointer();
             MemorySegment slice = msai.segmentSliceOrNull(offset, length);
             if (slice != null) {
-                in.skipBytes(length);
-                return action.apply(slice);
+                R result = action.apply(slice);
+                in.seek(offset + length);
+                return result;
             }
         }
         if (in instanceof DirectAccessInput dai) {
             long offset = in.getFilePointer();
             @SuppressWarnings("unchecked")
             R[] result = (R[]) new Object[1];
-            boolean available = dai.withMemorySegmentSlice(offset, length, seg -> {
-                in.skipBytes(length);
-                result[0] = action.apply(seg);
-            });
+            boolean available = dai.withMemorySegmentSlice(offset, length, seg -> result[0] = action.apply(seg));
             if (available) {
+                in.seek(offset + length);
                 return result[0];
             }
         }
         return copyAndApply(in, Math.toIntExact(length), scratchSupplier, action);
+    }
+
+    /**
+     * Variant of {@link #withSlice} for actions that produce no value, to scope a memory
+     * segment around a block of work rather than to compute a result from it.
+     *
+     * <p>How the segment is obtained, how long it stays valid, and how the position of the
+     * index input is advanced are all as documented on {@link #withSlice}.
+     *
+     * @param in              the index input positioned at the data to read
+     * @param length          the number of bytes to read
+     * @param scratchSupplier supplies a byte array of at least the requested
+     *                        length, used only on the heap-copy fallback path
+     * @param action          the action to perform on the memory segment
+     */
+    public static void withVoidSlice(
+        IndexInput in,
+        long length,
+        IntFunction<byte[]> scratchSupplier,
+        CheckedConsumer<MemorySegment, IOException> action
+    ) throws IOException {
+        checkInputType(in);
+        if (in instanceof MemorySegmentAccessInput msai) {
+            long offset = in.getFilePointer();
+            MemorySegment slice = msai.segmentSliceOrNull(offset, length);
+            if (slice != null) {
+                action.accept(slice);
+                in.seek(offset + length);
+                return;
+            }
+        }
+        if (in instanceof DirectAccessInput dai) {
+            long offset = in.getFilePointer();
+            boolean available = dai.withMemorySegmentSlice(offset, length, action);
+            if (available) {
+                in.seek(offset + length);
+                return;
+            }
+        }
+        copyAndAccept(in, Math.toIntExact(length), scratchSupplier, action);
     }
 
     /**
@@ -280,5 +319,16 @@ public final class IndexInputUtils {
         byte[] buf = scratchSupplier.apply(bytesToRead);
         in.readBytes(buf, 0, bytesToRead);
         return MemorySegmentUtils.withDowncallSegment(buf, bytesToRead, action);
+    }
+
+    private static void copyAndAccept(
+        IndexInput in,
+        int bytesToRead,
+        IntFunction<byte[]> scratchSupplier,
+        CheckedConsumer<MemorySegment, IOException> action
+    ) throws IOException {
+        byte[] buf = scratchSupplier.apply(bytesToRead);
+        in.readBytes(buf, 0, bytesToRead);
+        MemorySegmentUtils.withVoidDowncallSegment(buf, bytesToRead, action);
     }
 }
