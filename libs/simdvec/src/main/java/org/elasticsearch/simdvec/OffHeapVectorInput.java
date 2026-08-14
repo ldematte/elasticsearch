@@ -140,7 +140,7 @@ public final class OffHeapVectorInput extends IndexInput implements HasIndexSlic
         assert arena.scope().isAlive();
         int pageIdx = (int) (offset / pageBytes);
         long pageOffset = offset % pageBytes;
-        action.accept(pages.get(pageIdx).asSlice(pageOffset, length).asReadOnly());
+        action.accept(pages.get(pageIdx).asSlice(pageOffset, length));
         return true;
     }
 

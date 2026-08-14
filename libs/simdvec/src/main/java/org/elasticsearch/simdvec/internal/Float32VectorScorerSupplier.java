@@ -36,6 +36,8 @@ public abstract sealed class Float32VectorScorerSupplier implements RandomVector
     final FixedSizeScratch secondScratch;
     final AddressesScratch addrsScratch = new AddressesScratch();
     final OffsetsScratch offsetsScratch = new OffsetsScratch();
+    final float[] resultScratch = new float[] { Float.NEGATIVE_INFINITY };
+
 
     protected Float32VectorScorerSupplier(IndexInput input, FloatVectorValues values) {
         this.input = input;
@@ -57,8 +59,9 @@ public abstract sealed class Float32VectorScorerSupplier implements RandomVector
             return Float.NEGATIVE_INFINITY;
         }
 
-        float[] maxScore = new float[] { Float.NEGATIVE_INFINITY };
-        long queryByteOffset = (long) firstOrd * vectorByteSize;
+        final long queryByteOffset = (long) firstOrd * vectorByteSize;
+
+        resultScratch[0] = Float.NEGATIVE_INFINITY;
         input.seek(queryByteOffset);
         IndexInputUtils.withVoidSlice(input, vectorByteSize, firstScratch, query -> {
             long[] offsets = offsetsScratch.get(numNodes);
@@ -72,13 +75,13 @@ public abstract sealed class Float32VectorScorerSupplier implements RandomVector
                 vectorByteSize,
                 numNodes,
                 addrsScratch,
-                addrs -> maxScore[0] = bulkScoreFromSegment(addrs, query, MemorySegment.ofArray(scores), numNodes)
+                addrs -> resultScratch[0] = bulkScoreFromSegment(addrs, query, MemorySegment.ofArray(scores), numNodes)
             );
             if (resolved == false) {
-                maxScore[0] = scorePerVectorFallback(query, scores, numNodes, offsets);
+                resultScratch[0] = scorePerVectorFallback(query, scores, numNodes, offsets);
             }
         });
-        return maxScore[0];
+        return resultScratch[0];
     }
 
     private float scorePerVectorFallback(MemorySegment query, float[] scores, int numNodes, long[] offsets) throws IOException {
@@ -93,14 +96,17 @@ public abstract sealed class Float32VectorScorerSupplier implements RandomVector
     }
 
     final float scoreFromOrds(int firstOrd, int secondOrd) throws IOException {
-        long firstByteOffset = (long) firstOrd * vectorByteSize;
-        long secondByteOffset = (long) secondOrd * vectorByteSize;
+        final long firstByteOffset = (long) firstOrd * vectorByteSize;
+        final long secondByteOffset = (long) secondOrd * vectorByteSize;
 
+        resultScratch[0] = Float.NEGATIVE_INFINITY;
         input.seek(firstByteOffset);
-        return IndexInputUtils.withSlice(input, vectorByteSize, firstScratch, firstSeg -> {
+        IndexInputUtils.withVoidSlice(input, vectorByteSize, firstScratch, firstSeg -> {
             input.seek(secondByteOffset);
-            return IndexInputUtils.withSlice(input, vectorByteSize, secondScratch, secondSeg -> scoreFromSegments(firstSeg, secondSeg));
+            IndexInputUtils.withVoidSlice(input, vectorByteSize, secondScratch,
+                secondSeg -> resultScratch[0] = scoreFromSegments(firstSeg, secondSeg));
         });
+        return resultScratch[0];
     }
 
     abstract float scoreFromSegments(MemorySegment a, MemorySegment b);
