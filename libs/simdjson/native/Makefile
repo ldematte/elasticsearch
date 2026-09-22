@@ -210,7 +210,11 @@ $(OBJ_WIN_X64)/simdjson.o: src/simdjson.cpp src/simdjson.h | $(OBJ_WIN_X64)
 
 $(DLL_WIN): $(OBJ_WIN_X64)/es_simdjson.o $(OBJ_WIN_X64)/simdjson.o | $(OUT_DIR_WIN_X64)
 	$(CXX_WIN) -shared -static -Wl,--pdb=$(PDB_WIN) -Wl,-S $^ -o $@
-	$(LLVM_PDBUTIL) dump -summary $(PDB_WIN) > /dev/null
+	@if command -v $(LLVM_PDBUTIL) >/dev/null 2>&1; then \
+	    $(LLVM_PDBUTIL) dump -summary $(PDB_WIN) > /dev/null; \
+	else \
+	    echo "note: $(LLVM_PDBUTIL) not on PATH; skipping PDB sanity check"; \
+	fi
 
 # --- directories ---
 
