@@ -40,7 +40,10 @@ cd "$(dirname "$0")"
 
 if [ "$LOCAL" = true ]; then
   echo "Building $IMAGE (host platform only) ..."
-  docker build --pull \
+  # buildx (rather than legacy `docker build`) so BuildKit populates the
+  # TARGETARCH build arg that the Dockerfile needs to pick the right llvm-mingw
+  # tarball. --load stores the image in the local docker daemon.
+  docker buildx build --pull --load \
     -f Dockerfile.cross-toolchain \
     -t "$IMAGE" \
     .
