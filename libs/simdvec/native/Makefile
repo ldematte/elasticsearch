@@ -102,11 +102,15 @@ PDB_WIN = $(OUT_DIR_WIN_X64)/vec.pdb
 # --- local: build for the current platform using the native compiler ---
 # On macOS, overrides CLANG/CLANG_LINK to use the system clang (SDK available natively).
 # On Linux, overrides CXX_ARM/CXX_X64 to drop the cross-compilation target.
-# Ob both, we use the system strip instead of llvm-strip.
+# On both, we use the system strip instead of llvm-strip.
+# On Windows (MSYS/MinGW/Cygwin shell), reuses the same llvm-mingw driver as
+# the docker path; requires x86_64-w64-mingw32-clang++ on PATH.
 
 .PHONY: all clean local local-install
 
-ifeq ($(shell uname -s),Darwin)
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
   LOCAL_PLATFORM = darwin-aarch64
   LOCAL_OUTPUT   = $(DYLIB)
   local: CLANG = clang++ -Winline
@@ -114,6 +118,10 @@ ifeq ($(shell uname -s),Darwin)
   local: DARWIN_STRIP = strip -x
   local: DARWIN_DSYMUTIL = dsymutil
   local: $(DYLIB)
+else ifneq (,$(or $(findstring MINGW,$(UNAME_S)),$(findstring MSYS,$(UNAME_S)),$(findstring CYGWIN,$(UNAME_S))))
+  LOCAL_PLATFORM = windows-x64
+  LOCAL_OUTPUT   = $(DLL_WIN)
+  local: $(DLL_WIN)
 else ifeq ($(shell uname -m),aarch64)
   LOCAL_PLATFORM = linux-aarch64
   LOCAL_OUTPUT   = $(SO_ARM)
