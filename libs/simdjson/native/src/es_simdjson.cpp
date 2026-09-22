@@ -20,6 +20,7 @@
 
 #include "simdjson.h"
 
+#include <iterator>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
