@@ -5,10 +5,11 @@
 # your election, the "Elastic License 2.0", the "GNU Affero General Public
 # License v3.0 only", or the "Server Side Public License, v 1".
 
-# Builds libvec for all three targets:
-#   build/libs/vec/shared/aarch64/libvec.dylib  (darwin-aarch64)
-#   build/libs/vec/shared/aarch64/libvec.so     (linux-aarch64)
-#   build/libs/vec/shared/amd64/libvec.so       (linux-x64)
+# Builds libvec for all four targets:
+#   build/libs/vec/shared/aarch64/libvec.dylib   (darwin-aarch64)
+#   build/libs/vec/shared/aarch64/libvec.so      (linux-aarch64)
+#   build/libs/vec/shared/amd64/libvec.so        (linux-x64)
+#   build/libs/vec/shared/windows-x64/vec.dll    (windows-x64)
 #
 # *_2.cpp files are compiled with a higher -march that enables tier-2 ISA
 # extensions (SVE for aarch64, AVX-512/icelake for amd64). All other files
@@ -52,6 +53,11 @@ CLANG_LINK  = $(CLANG_CXX) --target=arm64-apple-macos14 -fuse-ld=lld -nostdlib -
 CXX_ARM     = $(CLANG_CXX) --target=aarch64-linux-gnu -Winline
 CXX_X64     = $(CLANG_CXX) --target=x86_64-linux-gnu -Winline
 
+# Windows cross-compilation via llvm-mingw (baked into the toolchain image at
+# /opt/llvm-mingw, prepended to PATH)
+CXX_WIN     = x86_64-w64-mingw32-clang++ -Winline
+LLVM_PDBUTIL = llvm-pdbutil$(LLVM_SUFFIX)
+
 # Strip and debug-info commands per target platform
 DARWIN_STRIP    = llvm-strip$(LLVM_SUFFIX) --strip-debug
 LINUX_STRIP     = llvm-strip$(LLVM_SUFFIX) --strip-unneeded
@@ -69,6 +75,7 @@ SRC_AMD64_TIER3   = $(wildcard src/vec/c/amd64/*_3.cpp)
 OBJ_DARWIN  = build/obj/darwin-aarch64
 OBJ_LIN_ARM = build/obj/linux-aarch64
 OBJ_LIN_X64 = build/obj/linux-x64
+OBJ_WIN_X64 = build/obj/windows-x64
 
 # Object files
 OBJ_DARWIN_TIER1  = $(SRC_AARCH64_TIER1:src/vec/c/aarch64/%.cpp=$(OBJ_DARWIN)/%.o)
@@ -78,13 +85,19 @@ OBJ_LIN_ARM_TIER2 = $(SRC_AARCH64_TIER2:src/vec/c/aarch64/%.cpp=$(OBJ_LIN_ARM)/%
 OBJ_LIN_X64_TIER1 = $(SRC_AMD64_TIER1:src/vec/c/amd64/%.cpp=$(OBJ_LIN_X64)/%.o)
 OBJ_LIN_X64_TIER2 = $(SRC_AMD64_TIER2:src/vec/c/amd64/%.cpp=$(OBJ_LIN_X64)/%.o)
 OBJ_LIN_X64_TIER3 = $(SRC_AMD64_TIER3:src/vec/c/amd64/%.cpp=$(OBJ_LIN_X64)/%.o)
+OBJ_WIN_X64_TIER1 = $(SRC_AMD64_TIER1:src/vec/c/amd64/%.cpp=$(OBJ_WIN_X64)/%.o)
+OBJ_WIN_X64_TIER2 = $(SRC_AMD64_TIER2:src/vec/c/amd64/%.cpp=$(OBJ_WIN_X64)/%.o)
+OBJ_WIN_X64_TIER3 = $(SRC_AMD64_TIER3:src/vec/c/amd64/%.cpp=$(OBJ_WIN_X64)/%.o)
 
 # Output files
 OUT_DIR_AARCH64 = build/libs/vec/shared/aarch64
 OUT_DIR_AMD64   = build/libs/vec/shared/amd64
-DYLIB  = $(OUT_DIR_AARCH64)/libvec.dylib
-SO_ARM = $(OUT_DIR_AARCH64)/libvec.so
-SO_X64 = $(OUT_DIR_AMD64)/libvec.so
+OUT_DIR_WIN_X64 = build/libs/vec/shared/windows-x64
+DYLIB   = $(OUT_DIR_AARCH64)/libvec.dylib
+SO_ARM  = $(OUT_DIR_AARCH64)/libvec.so
+SO_X64  = $(OUT_DIR_AMD64)/libvec.so
+DLL_WIN = $(OUT_DIR_WIN_X64)/vec.dll
+PDB_WIN = $(OUT_DIR_WIN_X64)/vec.pdb
 
 # --- local: build for the current platform using the native compiler ---
 # On macOS, overrides CLANG/CLANG_LINK to use the system clang (SDK available natively).
@@ -126,9 +139,9 @@ endif
 	mkdir -p $(DEST)/$(LOCAL_PLATFORM)
 	cp $(LOCAL_OUTPUT) $(DEST)/$(LOCAL_PLATFORM)/$(notdir $(LOCAL_OUTPUT))
 
-# --- all: cross-compile all three targets (inside Docker) ---
+# --- all: cross-compile all four targets (inside Docker) ---
 
-all: $(DYLIB) $(SO_ARM) $(SO_X64)
+all: $(DYLIB) $(SO_ARM) $(SO_X64) $(DLL_WIN)
 
 # --- darwin-aarch64 ---
 
@@ -174,9 +187,28 @@ $(SO_X64): $(OBJ_LIN_X64_TIER1) $(OBJ_LIN_X64_TIER2) $(OBJ_LIN_X64_TIER3) | $(OU
 	$(LINUX_STRIP) $@
 	$(LINUX_OBJCOPY) --add-gnu-debuglink=$@.debug $@
 
+# --- windows-x64 ---
+# -gcodeview emits CodeView debug info; -Wl,--pdb= writes the corresponding
+# PDB next to the DLL; -Wl,-S strips the residual DWARF sections but keeps
+# the COFF symbol table. See the "PDB support" section of mstorsjo/llvm-mingw's
+# README for the officially documented recipe
+$(OBJ_WIN_X64_TIER1): $(OBJ_WIN_X64)/%.o: src/vec/c/amd64/%.cpp | $(OBJ_WIN_X64)
+	$(CXX_WIN) $(CXXFLAGS) -gcodeview -march=$(MARCH_AMD64_TIER1) $(HEADERS) -c $< -o $@
+
+$(OBJ_WIN_X64_TIER2): $(OBJ_WIN_X64)/%.o: src/vec/c/amd64/%.cpp | $(OBJ_WIN_X64)
+	$(CXX_WIN) $(CXXFLAGS) -gcodeview -march=$(MARCH_AMD64_TIER2) $(HEADERS) -c $< -o $@
+
+$(OBJ_WIN_X64_TIER3): $(OBJ_WIN_X64)/%.o: src/vec/c/amd64/%.cpp | $(OBJ_WIN_X64)
+	$(CXX_WIN) $(CXXFLAGS) -gcodeview -march=$(MARCH_AMD64_TIER3) $(HEADERS) -c $< -o $@
+
+$(DLL_WIN): $(OBJ_WIN_X64_TIER1) $(OBJ_WIN_X64_TIER2) $(OBJ_WIN_X64_TIER3) | $(OUT_DIR_WIN_X64)
+	$(CXX_WIN) -shared -static -Wl,--pdb=$(PDB_WIN) -Wl,-S $^ -o $@
+	$(LLVM_PDBUTIL) dump -summary $(PDB_WIN) > /dev/null
+
 # --- directories ---
 
-$(OBJ_DARWIN) $(OBJ_LIN_ARM) $(OBJ_LIN_X64) $(OUT_DIR_AARCH64) $(OUT_DIR_AMD64):
+$(OBJ_DARWIN) $(OBJ_LIN_ARM) $(OBJ_LIN_X64) $(OBJ_WIN_X64) \
+$(OUT_DIR_AARCH64) $(OUT_DIR_AMD64) $(OUT_DIR_WIN_X64):
 	mkdir -p $@
 
 clean:
