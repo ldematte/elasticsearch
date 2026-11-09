@@ -127,7 +127,7 @@ public class ReindexSslConfig {
         };
         for (Path file : configuration.getDependentFiles()) {
             try {
-                final FileWatcher watcher = new FileWatcher(file);
+                final FileWatcher watcher = FileWatcher.create(file);
                 watcher.addListener(listener);
                 resourceWatcher.add(watcher, ResourceWatcherService.Frequency.HIGH);
             } catch (IOException e) {

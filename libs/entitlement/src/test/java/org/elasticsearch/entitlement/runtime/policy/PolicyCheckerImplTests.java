@@ -31,7 +31,15 @@ import static org.elasticsearch.entitlement.runtime.policy.entitlements.FilesEnt
 public class PolicyCheckerImplTests extends ESTestCase {
     public void testRequestingClassFastPath() throws IOException, ClassNotFoundException {
         var callerClass = makeClassInItsOwnModule();
-        assertEquals(callerClass, checker(NO_ENTITLEMENTS_MODULE).requestingClass(callerClass));
+        var policyManager = new TestPolicyManager(
+            createEmptyTestServerPolicy(),
+            Map.of(),
+            c -> PolicyManager.PolicyScope.plugin("testComponent", "testModule"),
+            EmptyPathLookup.INSTANCE,
+            List.of(),
+            List.of()
+        );
+        assertEquals(callerClass, checker(NO_ENTITLEMENTS_MODULE, policyManager, EmptyPathLookup.INSTANCE).requestingClass(callerClass));
     }
 
     public void testRequestingModuleWithStackWalk() throws IOException, ClassNotFoundException {
@@ -77,28 +85,8 @@ public class PolicyCheckerImplTests extends ESTestCase {
         Files.createFile(allegedDir); // Not a dir!
         Files.createSymbolicLink(symlink, target);
 
-        PathLookup testPathLookup = new PathLookup() {
-            @Override
-            public Path pidFile() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public Stream<Path> getBaseDirPaths(BaseDir baseDir) {
-                return Stream.empty();
-            }
-
-            @Override
-            public Stream<Path> resolveSettingPaths(BaseDir baseDir, String settingName) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public boolean isPathOnDefaultFilesystem(Path path) {
-                // We need this to be on the default filesystem or it will be trivially allowed
-                return true;
-            }
-        };
+        // We need this to be on the default filesystem or it will be trivially allowed
+        PathLookup testPathLookup = EmptyPathLookup.INSTANCE;
 
         var policyManager = new TestPolicyManager(
             createEmptyTestServerPolicy(),

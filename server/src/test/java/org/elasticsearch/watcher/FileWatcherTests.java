@@ -90,7 +90,7 @@ public class FileWatcherTests extends ESTestCase {
         RecordingChangeListener changes = new RecordingChangeListener(tempDir);
         Path testFile = tempDir.resolve("test.txt");
         touch(testFile);
-        FileWatcher fileWatcher = new FileWatcher(testFile);
+        FileWatcher fileWatcher = FileWatcher.create(testFile);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         assertThat(changes.notifications(), contains(equalTo("onFileInit: test.txt")));
@@ -124,7 +124,7 @@ public class FileWatcherTests extends ESTestCase {
         RecordingChangeListener changes = new RecordingChangeListener(tempDir);
         Path testFile = tempDir.resolve("test.txt");
         touch(testFile);
-        FileWatcher fileWatcher = new FileWatcher(testFile, true);
+        FileWatcher fileWatcher = FileWatcher.create(testFile, true);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         assertThat(changes.notifications(), contains(equalTo("onFileInit: test.txt")));
@@ -174,7 +174,7 @@ public class FileWatcherTests extends ESTestCase {
         touch(testDir.resolve("test.txt"));
         touch(testDir.resolve("test0.txt"));
 
-        FileWatcher fileWatcher = new FileWatcher(testDir);
+        FileWatcher fileWatcher = FileWatcher.create(testDir);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         assertThat(
@@ -277,7 +277,7 @@ public class FileWatcherTests extends ESTestCase {
             Files.writeString(testDir.resolve(fileName), "initial", StandardCharsets.UTF_8);
         }
 
-        FileWatcher fileWatcher = new FileWatcher(testDir, true);
+        FileWatcher fileWatcher = FileWatcher.create(testDir, true);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         assertThat(
@@ -361,7 +361,7 @@ public class FileWatcherTests extends ESTestCase {
         Files.createDirectories(testDir.resolve("sub-dir"));
         touch(testDir.resolve("sub-dir/test0.txt"));
 
-        FileWatcher fileWatcher = new FileWatcher(testDir);
+        FileWatcher fileWatcher = FileWatcher.create(testDir);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         assertThat(
@@ -434,7 +434,7 @@ public class FileWatcherTests extends ESTestCase {
         touch(subDir.resolve("test0.txt"));
         touch(subDir.resolve("test1.txt"));
 
-        FileWatcher fileWatcher = new FileWatcher(testDir);
+        FileWatcher fileWatcher = FileWatcher.create(testDir);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         assertThat(
@@ -484,7 +484,7 @@ public class FileWatcherTests extends ESTestCase {
         touch(testDir.resolve("test0.txt"));
         touch(testDir.resolve("test1.txt"));
 
-        FileWatcher fileWatcher = new FileWatcher(testDir);
+        FileWatcher fileWatcher = FileWatcher.create(testDir);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         changes.notifications().clear();
@@ -503,7 +503,7 @@ public class FileWatcherTests extends ESTestCase {
         RecordingChangeListener changes = new RecordingChangeListener(tempDir);
         Path testDir = tempDir.resolve("test-dir");
 
-        FileWatcher fileWatcher = new FileWatcher(testDir);
+        FileWatcher fileWatcher = FileWatcher.create(testDir);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         assertThat(changes.notifications(), hasSize(0));
@@ -529,7 +529,7 @@ public class FileWatcherTests extends ESTestCase {
         RecordingChangeListener changes = new RecordingChangeListener(tempDir);
         Path testFile = tempDir.resolve("testfile.txt");
 
-        FileWatcher fileWatcher = new FileWatcher(testFile);
+        FileWatcher fileWatcher = FileWatcher.create(testFile);
         fileWatcher.addListener(changes);
         fileWatcher.init();
         assertThat(changes.notifications(), hasSize(0));

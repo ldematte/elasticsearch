@@ -224,7 +224,7 @@ public final class WorkloadIdentitySslConfig implements Closeable {
         };
         for (Path file : configuration.getDependentFiles()) {
             try {
-                final FileWatcher watcher = new FileWatcher(file);
+                final FileWatcher watcher = FileWatcher.create(file);
                 watcher.addListener(listener);
                 watcherHandles.add(resourceWatcher.add(watcher, ResourceWatcherService.Frequency.HIGH));
             } catch (IOException e) {

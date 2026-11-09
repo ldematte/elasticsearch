@@ -102,7 +102,7 @@ public final class SSLConfigurationReloader {
 
         pathToConfigurationsMap.forEach((path, configurations) -> {
             ChangeListener changeListener = new ChangeListener(List.copyOf(configurations), reloadConsumer);
-            FileWatcher fileWatcher = new FileWatcher(path);
+            FileWatcher fileWatcher = FileWatcher.create(path);
             fileWatcher.addListener(changeListener);
             try {
                 resourceWatcherService.add(fileWatcher, Frequency.HIGH);

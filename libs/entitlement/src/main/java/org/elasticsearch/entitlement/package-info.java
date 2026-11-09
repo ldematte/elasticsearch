@@ -165,6 +165,11 @@
 /// to identify the caller. This is done in the injected prologue, via a helper function
 /// [org.elasticsearch.entitlement.bridge.Util#getCallerClass], which performs a limited stack walk.
 ///
+/// Server code can make the checks in some of its methods use the entitlements of another class, by annotating them with
+/// [org.elasticsearch.entitlement.runtime.api.DelegateToCaller] or [org.elasticsearch.entitlement.runtime.api.DelegateToCreator].
+/// For those methods, the policy checker replaces the caller with the class whose entitlements apply. The annotations describe
+/// the rules.
+///
 /// ## Map to a policy
 /// ### Identify the "layer"
 ///

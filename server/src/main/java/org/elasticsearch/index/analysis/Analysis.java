@@ -53,6 +53,7 @@ import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.hash.MessageDigests;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.entitlement.runtime.api.DelegateToCaller;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.synonyms.PagedResult;
 import org.elasticsearch.synonyms.SynonymRule;
@@ -341,6 +342,7 @@ public class Analysis {
      * @throws IllegalArgumentException
      *          If the word list cannot be found at either key.
      */
+    @DelegateToCaller
     public static List<String> getWordList(
         Environment env,
         Settings settings,
@@ -462,6 +464,7 @@ public class Analysis {
      * @throws IllegalArgumentException
      *          If the Reader can not be instantiated.
      */
+    @DelegateToCaller
     public static Reader getReaderFromFile(Environment env, String filePath, String settingPrefix) {
         if (filePath == null) {
             return null;

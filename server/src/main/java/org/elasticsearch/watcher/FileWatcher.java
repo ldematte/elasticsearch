@@ -13,9 +13,13 @@ import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.hash.MessageDigests;
 import org.elasticsearch.common.util.CollectionUtils;
+import org.elasticsearch.entitlement.runtime.api.DelegateToCreator;
+import org.elasticsearch.entitlement.runtime.api.Delegation;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,8 +31,11 @@ import java.util.stream.StreamSupport;
  * File resources watcher
  *
  * The file watcher checks directory and all its subdirectories for file changes and notifies its listeners accordingly
+ * <p>
+ * Create instances with {@link #create}. A watcher checks its file operations against the entitlements of the class that
+ * created it, whichever thread runs the watcher.
  */
-public class FileWatcher extends AbstractResourceWatcher<FileChangesListener> {
+public abstract class FileWatcher extends AbstractResourceWatcher<FileChangesListener> {
 
     private FileObserver rootFileObserver;
     private final Path path;
@@ -36,25 +43,35 @@ public class FileWatcher extends AbstractResourceWatcher<FileChangesListener> {
 
     private static final Logger logger = LogManager.getLogger(FileWatcher.class);
 
-    /**
-     * Creates new file watcher on the given directory
-     * @param path the directory to watch
-     */
-    public FileWatcher(Path path) {
-        this(path, false);
+    FileWatcher(Path path, boolean checkFileContents) {
+        this.path = path;
+        this.checkFileContents = checkFileContents;
+        rootFileObserver = new FileObserver(path);
     }
 
     /**
-     * Creates new file watcher on the given directory
+     * Creates a file watcher on the given directory, for the class that calls this method.
+     * @param path the directory to watch
+     */
+    public static FileWatcher create(Path path) {
+        return create(path, false);
+    }
+
+    /**
+     * Creates a file watcher on the given directory, for the class that calls this method.
      * @param path the directory to watch
      * @param checkFileContents whether to inspect the content of the file for changes (via a message digest)
      *                          - this is a "best efforts" check and will err on the side of sending extra change notifications if the file
      *                          <em>might</em> have changed.
      */
-    public FileWatcher(Path path, boolean checkFileContents) {
-        this.path = path;
-        this.checkFileContents = checkFileContents;
-        rootFileObserver = new FileObserver(path);
+    public static FileWatcher create(Path path, boolean checkFileContents) {
+        return Delegation.instantiate(
+            MethodHandles.lookup(),
+            FileWatcher.class,
+            MethodType.methodType(void.class, Path.class, boolean.class),
+            path,
+            checkFileContents
+        );
     }
 
     // For testing
@@ -121,19 +138,23 @@ public class FileWatcher extends AbstractResourceWatcher<FileChangesListener> {
         void onFileDeleted() {}
     }
 
-    protected boolean fileExists(Path path) {
+    @DelegateToCreator
+    boolean fileExists(Path path) {
         return Files.exists(path);
     }
 
-    protected BasicFileAttributes readAttributes(Path path) throws IOException {
+    @DelegateToCreator
+    BasicFileAttributes readAttributes(Path path) throws IOException {
         return Files.readAttributes(path, BasicFileAttributes.class);
     }
 
-    protected InputStream newInputStream(Path path) throws IOException {
+    @DelegateToCreator
+    InputStream newInputStream(Path path) throws IOException {
         return Files.newInputStream(path);
     }
 
-    protected DirectoryStream<Path> listFiles(Path path) throws IOException {
+    @DelegateToCreator
+    DirectoryStream<Path> listFiles(Path path) throws IOException {
         return Files.newDirectoryStream(path);
     }
 

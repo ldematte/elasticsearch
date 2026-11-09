@@ -584,7 +584,7 @@ class S3Service extends AbstractLifecycleComponent {
          * file to which {@code webIdentityTokenFileSymlink} refers gets updated.
          */
         private void setupFileWatcherToRefreshCredentials(Path webIdentityTokenFileSymlink, ResourceWatcherService resourceWatcherService) {
-            var watcher = new FileWatcher(webIdentityTokenFileSymlink);
+            var watcher = FileWatcher.create(webIdentityTokenFileSymlink);
             watcher.addListener(new FileChangesListener() {
 
                 @Override

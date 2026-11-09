@@ -194,7 +194,7 @@ public final class CrossClusterApiKeySigningConfigReloader implements Reloadable
                 var changeListener = existingChangeListener != null ? existingChangeListener : new ChangeListener(path);
                 changeListener.addChangeCallback(new ChangeCallback(clusterAlias, () -> this.reloadConsumer(clusterAlias, null, false)));
 
-                FileWatcher fileWatcher = new FileWatcher(path);
+                FileWatcher fileWatcher = FileWatcher.create(path);
                 fileWatcher.addListener(changeListener);
                 try {
                     resourceWatcherService.add(fileWatcher, Frequency.HIGH);

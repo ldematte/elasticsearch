@@ -59,7 +59,7 @@ final class ConfigDatabases implements Closeable {
     void initialize(ResourceWatcherService resourceWatcher) throws IOException {
         configDatabases.putAll(initConfigDatabases());
 
-        FileWatcher watcher = new FileWatcher(geoipConfigDir);
+        FileWatcher watcher = FileWatcher.create(geoipConfigDir);
         watcher.addListener(new GeoipDirectoryListener());
         resourceWatcher.add(watcher, ResourceWatcherService.Frequency.HIGH);
 

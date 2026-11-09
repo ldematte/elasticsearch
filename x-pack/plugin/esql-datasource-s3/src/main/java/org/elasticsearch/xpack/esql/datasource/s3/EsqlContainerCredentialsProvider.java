@@ -278,7 +278,7 @@ public class EsqlContainerCredentialsProvider implements AwsCredentialsProvider,
         if (resourceWatcherService == null) {
             return;
         }
-        FileWatcher watcher = new FileWatcher(tokenSymlink);
+        FileWatcher watcher = FileWatcher.create(tokenSymlink);
         watcher.addListener(new FileChangesListener() {
             @Override
             public void onFileCreated(Path file) {

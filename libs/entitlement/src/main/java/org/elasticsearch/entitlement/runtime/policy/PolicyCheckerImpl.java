@@ -137,6 +137,7 @@ public class PolicyCheckerImpl implements PolicyChecker {
                 requestingClass,
                 operationDescription.get()
             ),
+            callerClass,
             requestingClass,
             entitlements
         );
@@ -240,6 +241,7 @@ public class PolicyCheckerImpl implements PolicyChecker {
                     requestingClass,
                     realPath == null ? path : Strings.format("%s -> %s", path, realPath)
                 ),
+                callerClass,
                 requestingClass,
                 entitlements
             );
@@ -272,6 +274,7 @@ public class PolicyCheckerImpl implements PolicyChecker {
                     requestingClass,
                     path
                 ),
+                callerClass,
                 requestingClass,
                 entitlements
             );
@@ -344,8 +347,8 @@ public class PolicyCheckerImpl implements PolicyChecker {
         }
 
         var classEntitlements = policyManager.getEntitlements(requestingClass);
-        checkFlagEntitlement(classEntitlements, InboundNetworkEntitlement.class, requestingClass);
-        checkFlagEntitlement(classEntitlements, OutboundNetworkEntitlement.class, requestingClass);
+        checkFlagEntitlement(classEntitlements, InboundNetworkEntitlement.class, callerClass, requestingClass);
+        checkFlagEntitlement(classEntitlements, OutboundNetworkEntitlement.class, callerClass, requestingClass);
     }
 
     @Override
@@ -381,6 +384,7 @@ public class PolicyCheckerImpl implements PolicyChecker {
                 requestingClass,
                 property
             ),
+            callerClass,
             requestingClass,
             entitlements
         );
@@ -392,18 +396,18 @@ public class PolicyCheckerImpl implements PolicyChecker {
     }
 
     /**
-     * Walks the stack to determine which class should be checked for entitlements.
+     * Finds the class whose entitlements the check uses.
      *
-     * @param callerClass when non-null will be returned;
-     *                    this is a fast-path check that can avoid the stack walk
-     *                    in cases where the caller class is available.
+     * @param callerClass the class that called the instrumented method, or {@code null} to find it by walking the stack.
+     *                    The walk does not apply delegation. A non-null class is returned unless it is server code with
+     *                    delegation annotations; see {@link DelegationResolver}.
      * @return the requesting class, or {@code null} if the entire call stack
      * comes from the entitlement library itself.
+     * @throws IllegalStateException if the delegation annotations are used wrongly
      */
     Class<?> requestingClass(Class<?> callerClass) {
         if (callerClass != null) {
-            // fast path
-            return callerClass;
+            return policyManager.delegationResolver().requestingClass(callerClass);
         }
         Optional<Class<?>> result = StackWalker.getInstance(RETAIN_CLASS_REFERENCE)
             .walk(frames -> findRequestingFrame(frames).map(StackWalker.StackFrame::getDeclaringClass));
@@ -422,6 +426,7 @@ public class PolicyCheckerImpl implements PolicyChecker {
     private void checkFlagEntitlement(
         ModuleEntitlements classEntitlements,
         Class<? extends Entitlement> entitlementClass,
+        Class<?> callerClass,
         Class<?> requestingClass
     ) {
         if (classEntitlements.hasEntitlement(entitlementClass) == false) {
@@ -433,6 +438,7 @@ public class PolicyCheckerImpl implements PolicyChecker {
                     requestingClass,
                     PolicyParser.buildEntitlementNameFromClass(entitlementClass)
                 ),
+                callerClass,
                 requestingClass,
                 classEntitlements
             );
@@ -448,7 +454,10 @@ public class PolicyCheckerImpl implements PolicyChecker {
         );
     }
 
-    private void notEntitled(String message, Class<?> requestingClass, ModuleEntitlements entitlements) {
+    private void notEntitled(String message, Class<?> callerClass, Class<?> requestingClass, ModuleEntitlements entitlements) {
+        if (callerClass != null && callerClass != requestingClass) {
+            message = Strings.format("%s, delegated by [%s]", message, callerClass);
+        }
         var exception = new NotEntitledException(message);
         // Don't emit a log for suppressed packages, e.g. packages containing self tests
         if (suppressFailureLogPackages.contains(requestingClass.getPackage()) == false) {
@@ -463,7 +472,7 @@ public class PolicyCheckerImpl implements PolicyChecker {
         if (policyManager.isTriviallyAllowed(requestingClass)) {
             return;
         }
-        checkFlagEntitlement(policyManager.getEntitlements(requestingClass), entitlementClass, requestingClass);
+        checkFlagEntitlement(policyManager.getEntitlements(requestingClass), entitlementClass, callerClass, requestingClass);
     }
 
     @Override

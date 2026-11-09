@@ -74,8 +74,10 @@ public class TestEntitlementsRule implements TestRule {
                                 policyManager.setEntitledTestPackages();
                             }
                             policyManager.clearModuleEntitlementsCache();
+                            policyManager.clearDelegationBugs();
                             // evaluate the suite
                             base.evaluate();
+                            policyManager.assertNoDelegationBugs(description.getDisplayName());
                         } finally {
                             pathLookup.reset();
                             policyManager.resetAfterTest();

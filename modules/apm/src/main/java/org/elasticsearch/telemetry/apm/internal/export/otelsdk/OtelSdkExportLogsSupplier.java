@@ -296,7 +296,7 @@ public class OtelSdkExportLogsSupplier implements Closeable {
             watchPaths.add(resolvePath(key));
         }
         for (Path path : watchPaths) {
-            FileWatcher watcher = new FileWatcher(path);
+            FileWatcher watcher = FileWatcher.create(path);
             watcher.addListener(listener);
             try {
                 resourceWatcher.add(watcher, ResourceWatcherService.Frequency.HIGH);

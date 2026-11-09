@@ -11,6 +11,8 @@ package org.elasticsearch.entitlement.runtime.policy;
 
 import org.elasticsearch.bootstrap.TestScopeResolver;
 import org.elasticsearch.common.util.ArrayUtils;
+import org.elasticsearch.core.Strings;
+import org.elasticsearch.entitlement.runtime.delegation.DelegationRegistry;
 import org.elasticsearch.test.ESTestCase;
 
 import java.net.URI;
@@ -22,6 +24,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
@@ -40,6 +44,19 @@ public class TestPolicyManager extends PolicyManager {
     final Collection<Path> classpath;
     final Collection<URI> testOnlyClasspath;
 
+    private final DelegationRegistry delegationRegistry;
+    private final ClassValue<Boolean> canDelegateCache = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            // Check the registry first: the scope resolver logs a warning for classes it cannot place, such as test classes
+            return isTrustedSystemClass(type) == false
+                && delegationRegistry.delegatedMethods(type) != null
+                && resolveScope(type).kind() == ComponentKind.SERVER;
+        }
+    };
+    private final AtomicReference<IllegalStateException> firstDelegationBug = new AtomicReference<>();
+    private final AtomicInteger delegationBugCount = new AtomicInteger();
+
     public TestPolicyManager(
         Policy serverPolicy,
         Map<String, Policy> pluginPolicies,
@@ -48,7 +65,20 @@ public class TestPolicyManager extends PolicyManager {
         Collection<Path> classpath,
         Collection<URI> testOnlyClasspath
     ) {
-        super(serverPolicy, pluginPolicies, Map.of(), scopeResolver, name -> classpath, pathLookup);
+        this(serverPolicy, pluginPolicies, scopeResolver, pathLookup, classpath, testOnlyClasspath, DelegationRegistry.EMPTY);
+    }
+
+    public TestPolicyManager(
+        Policy serverPolicy,
+        Map<String, Policy> pluginPolicies,
+        Function<Class<?>, PolicyScope> scopeResolver,
+        PathLookup pathLookup,
+        Collection<Path> classpath,
+        Collection<URI> testOnlyClasspath,
+        DelegationRegistry delegationRegistry
+    ) {
+        super(serverPolicy, pluginPolicies, Map.of(), scopeResolver, name -> classpath, pathLookup, delegationRegistry);
+        this.delegationRegistry = delegationRegistry;
         this.classpath = classpath;
         this.testOnlyClasspath = testOnlyClasspath;
         resetAfterTest();
@@ -137,9 +167,49 @@ public class TestPolicyManager extends PolicyManager {
         return classpath; // required to grant read access to the production source and test resources
     }
 
-    private boolean isEntitlementClass(Class<?> requestingClass) {
-        return requestingClass.getPackageName().startsWith("org.elasticsearch.entitlement")
-            && (requestingClass.getName().contains("Test") == false);
+    @Override
+    protected boolean isEntitlementClass(Class<?> type) {
+        return type.getPackageName().startsWith("org.elasticsearch.entitlement") && (type.getName().contains("Test") == false);
+    }
+
+    /**
+     * Without modules, server classes are identified by their scope instead of the server layer. Only classes with annotated
+     * methods are looked at.
+     */
+    @Override
+    protected boolean canDelegate(Class<?> type) {
+        return canDelegateCache.get(type);
+    }
+
+    @Override
+    void onDelegationBug(IllegalStateException bug) {
+        firstDelegationBug.compareAndSet(null, bug);
+        delegationBugCount.incrementAndGet();
+    }
+
+    /**
+     * Forgets the delegation bugs recorded so far, such as those from threads that a previous suite left running.
+     */
+    public void clearDelegationBugs() {
+        firstDelegationBug.set(null);
+        delegationBugCount.set(0);
+    }
+
+    /**
+     * Fails if a delegation bug was recorded since {@link #clearDelegationBugs()}, even if the code that caught the exception
+     * only logged it.
+     *
+     * @param suiteName the name of the suite, for the failure message
+     * @throws AssertionError with the first recorded bug as its cause
+     */
+    public void assertNoDelegationBugs(String suiteName) {
+        int count = delegationBugCount.get();
+        if (count > 0) {
+            throw new AssertionError(
+                Strings.format("[%d] entitlement delegation bug(s) detected during [%s]", count, suiteName),
+                firstDelegationBug.get()
+            );
+        }
     }
 
     private boolean isTestFrameworkClass(Class<?> requestingClass) {

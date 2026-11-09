@@ -111,7 +111,7 @@ public class WildcardServiceProviderResolver {
             );
         }
 
-        final FileWatcher fileWatcher = new FileWatcher(path);
+        final FileWatcher fileWatcher = FileWatcher.create(path);
         fileWatcher.addListener(new FileChangesListener() {
             @Override
             public void onFileCreated(Path file) {

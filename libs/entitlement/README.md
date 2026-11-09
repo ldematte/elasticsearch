@@ -75,6 +75,16 @@ In any case, before adding a `server` entitlement or make any change to the serv
 
 Finally, there are some actions that are always denied; these actions do not have an associated entitlement, they are blocked with no option to allow them via a policy. Examples are: spawning a new process, manipulating files via file descriptors, starting a HTTP server, changing the locale, timezone, in/out/err streams, the default exception handler, etc.
 
+### Server code that works for a plugin
+
+An entitlement check uses the entitlements of the class that calls the instrumented method. So when a plugin calls a server utility that reads a file, the check uses the entitlements of  `server`, not those of the plugin. The plugin can be denied a path it is entitled to, such as one of its exclusive paths. It can also read a path that only `server` should be entitled to read.
+
+Server code can make these checks use the entitlements of the plugin instead, with one of two annotations on its methods:
+- `@DelegateToCaller`, when the work happens during the plugin's call. The checks use the entitlements of the method's caller. `Analysis#getWordList` is an example.
+- `@DelegateToCreator`, when the work continues after the plugin's call returns, for example on a background thread. The checks use the entitlements of the class that created the instance. The class must be abstract, and create its instances in a static factory method, with `Delegation#instantiate`. `FileWatcher` is an example.
+
+The module must run the annotation processor from `:libs:entitlement:delegation-processor`. The Javadoc of each annotation describes its rules.
+
 ## Tips
 
 ### What to do when you have a NotEntitledException

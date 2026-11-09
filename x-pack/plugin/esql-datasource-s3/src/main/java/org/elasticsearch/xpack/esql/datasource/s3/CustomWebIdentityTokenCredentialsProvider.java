@@ -176,7 +176,7 @@ public class CustomWebIdentityTokenCredentialsProvider implements AwsCredentials
      * before the cached credentials expire.
      */
     private void setupFileWatcherToRefreshCredentials(Path webIdentityTokenFileSymlink, ResourceWatcherService resourceWatcherService) {
-        FileWatcher watcher = new FileWatcher(webIdentityTokenFileSymlink);
+        FileWatcher watcher = FileWatcher.create(webIdentityTokenFileSymlink);
         watcher.addListener(new FileChangesListener() {
 
             @Override

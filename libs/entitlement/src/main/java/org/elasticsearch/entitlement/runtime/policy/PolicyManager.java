@@ -9,6 +9,8 @@
 
 package org.elasticsearch.entitlement.runtime.policy;
 
+import org.elasticsearch.entitlement.runtime.delegation.DelegationRegistry;
+import org.elasticsearch.entitlement.runtime.delegation.DelegationRuntime;
 import org.elasticsearch.entitlement.runtime.policy.FileAccessTree.ExclusiveFileEntitlement;
 import org.elasticsearch.entitlement.runtime.policy.FileAccessTree.ExclusivePath;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.Entitlement;
@@ -212,6 +214,8 @@ public class PolicyManager {
 
     private final Function<String, Collection<Path>> pluginSourcePathsResolver;
 
+    private final DelegationResolver delegationResolver;
+
     /**
      * Paths that are only allowed for a single module. Used to generate
      * structures to indicate other modules aren't allowed to use these
@@ -241,6 +245,28 @@ public class PolicyManager {
         Function<String, Collection<Path>> pluginSourcePathsResolver,
         PathLookup pathLookup
     ) {
+        this(
+            serverPolicy,
+            pluginPolicies,
+            pluginSyntheticModuleNames,
+            scopeResolver,
+            pluginSourcePathsResolver,
+            pathLookup,
+            DelegationRegistry.EMPTY
+        );
+    }
+
+    @SuppressWarnings("this-escape") // the resolver only calls the overridable hooks after construction
+    public PolicyManager(
+        Policy serverPolicy,
+        Map<String, Policy> pluginPolicies,
+        Map<String, String> pluginSyntheticModuleNames,
+        Function<Class<?>, PolicyScope> scopeResolver,
+        Function<String, Collection<Path>> pluginSourcePathsResolver,
+        PathLookup pathLookup,
+        DelegationRegistry delegationRegistry
+    ) {
+        this.delegationResolver = new DelegationResolver(this, requireNonNull(delegationRegistry));
         this.serverEntitlements = buildScopeEntitlementsMap(requireNonNull(serverPolicy), null);
         this.pluginsEntitlements = requireNonNull(pluginPolicies).entrySet()
             .stream()
@@ -398,6 +424,46 @@ public class PolicyManager {
      */
     protected boolean isTrustedSystemClass(Class<?> requestingClass) {
         return SYSTEM_LAYER_MODULES.contains(requestingClass.getModule());
+    }
+
+    /**
+     * Whether {@code type} belongs to the entitlement library. Delegation ignores the stack frames of these classes. In
+     * production, the system layer already contains the entitlement library. This matters where classes are not in modules,
+     * as in tests and benchmarks.
+     */
+    protected boolean isEntitlementClass(Class<?> type) {
+        return type.getModule() == PolicyManager.class.getModule();
+    }
+
+    /**
+     * Whether the {@link org.elasticsearch.entitlement.runtime.api.DelegateToCaller} and
+     * {@link org.elasticsearch.entitlement.runtime.api.DelegateToCreator} annotations on the methods of {@code type} take
+     * effect. By default, only classes in the server layer may delegate.
+     */
+    protected boolean canDelegate(Class<?> type) {
+        return SERVER_LAYER_MODULES.contains(type.getModule());
+    }
+
+    /**
+     * Records each wrong use of {@link org.elasticsearch.entitlement.runtime.api.DelegateToCaller} or
+     * {@link org.elasticsearch.entitlement.runtime.api.DelegateToCreator}, so that tests can fail even if the code that
+     * catches the exception only logs it. Production does nothing.
+     */
+    void onDelegationBug(IllegalStateException bug) {}
+
+    protected final PolicyScope resolveScope(Class<?> requestingClass) {
+        return scopeResolver.apply(requestingClass);
+    }
+
+    DelegationResolver delegationResolver() {
+        return delegationResolver;
+    }
+
+    /**
+     * @return the support that bootstrap installs with {@link DelegationRuntime#install}
+     */
+    public DelegationRuntime.Support delegationSupport() {
+        return delegationResolver;
     }
 
     @Override

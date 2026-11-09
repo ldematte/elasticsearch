@@ -1317,7 +1317,7 @@ public class SamlRealmTests extends SamlTestCase {
                     // Add metadata update listener
                     final CountDownLatch metadataUpdateLatch = new CountDownLatch(1);
                     FileReloadListener metadataUpdateListener = new FileReloadListener(realmMetadataPath, metadataUpdateLatch::countDown);
-                    FileWatcher metadataUpdateWatcher = new FileWatcher(realmMetadataPath);
+                    FileWatcher metadataUpdateWatcher = FileWatcher.create(realmMetadataPath);
                     metadataUpdateWatcher.addListener(metadataUpdateListener);
                     watcherService.add(metadataUpdateWatcher, ResourceWatcherService.Frequency.MEDIUM);
                     // Put updated metadata contents into realm metadata file

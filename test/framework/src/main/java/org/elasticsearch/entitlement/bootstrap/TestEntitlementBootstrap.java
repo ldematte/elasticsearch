@@ -18,6 +18,8 @@ import org.elasticsearch.core.PathUtils;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.entitlement.config.MainInstrumentationProvider;
 import org.elasticsearch.entitlement.initialization.EntitlementInitialization;
+import org.elasticsearch.entitlement.runtime.delegation.DelegationRegistry;
+import org.elasticsearch.entitlement.runtime.delegation.DelegationRuntime;
 import org.elasticsearch.entitlement.runtime.policy.PathLookup;
 import org.elasticsearch.entitlement.runtime.policy.Policy;
 import org.elasticsearch.entitlement.runtime.policy.PolicyCheckerImpl;
@@ -63,6 +65,7 @@ public class TestEntitlementBootstrap {
         assert POLICY_MANAGER == null && TEST_PATH_LOOKUP == null : "Test entitlement bootstrap called multiple times";
         TEST_PATH_LOOKUP = new TestPathLookup(tempDir);
         POLICY_MANAGER = createPolicyManager(TEST_PATH_LOOKUP);
+        DelegationRuntime.install(POLICY_MANAGER.delegationSupport());
         loadAgent(POLICY_MANAGER, TEST_PATH_LOOKUP);
     }
 
@@ -143,7 +146,8 @@ public class TestEntitlementBootstrap {
             scopeResolver,
             pathLookup,
             classPathEntries,
-            testOnlyClassPath
+            testOnlyClassPath,
+            DelegationRegistry.load(TestEntitlementBootstrap.class.getClassLoader())
         );
     }
 
